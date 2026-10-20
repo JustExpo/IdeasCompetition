@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 
 from app.common.model import require_aware
+from app.core.db import Database
 
 
 class FrozenClock:
@@ -21,3 +22,10 @@ class FrozenClock:
 
     def advance(self, delta: timedelta) -> None:
         self._now += delta
+
+
+class ReadyDatabase(Database):
+    """`Database` для тестов HTTP-слоя без PostgreSQL: готовность всегда успешна, соединений нет."""
+
+    async def check_ready(self) -> None:
+        return None

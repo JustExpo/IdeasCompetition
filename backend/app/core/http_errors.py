@@ -36,6 +36,7 @@ def build_problem(
     title: str,
     request_id: str,
     errors: list[dict[str, str]] | None = None,
+    retry_after: int | None = None,
 ) -> JSONResponse:
     body: dict[str, Any] = {
         "type": f"urn:ideas-competition:error:{code}",
@@ -46,12 +47,10 @@ def build_problem(
         "request_id": request_id,
         "errors": errors or [],
     }
-    return JSONResponse(
-        body,
-        status_code=status,
-        media_type=PROBLEM_CONTENT_TYPE,
-        headers={REQUEST_ID_HEADER: request_id},
-    )
+    headers = {REQUEST_ID_HEADER: request_id}
+    if retry_after is not None:
+        headers["Retry-After"] = str(retry_after)
+    return JSONResponse(body, status_code=status, media_type=PROBLEM_CONTENT_TYPE, headers=headers)
 
 
 def request_id_of(request: Request) -> str:
@@ -64,6 +63,7 @@ def _problem_for_app_error(request: Request, error: AppError) -> JSONResponse:
         code=error.code,
         title=error.message,
         request_id=request_id_of(request),
+        retry_after=error.retry_after,
     )
 
 

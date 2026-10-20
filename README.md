@@ -50,7 +50,8 @@ GitHub: https://github.com/JustExpo/IdeasCompetition
 | IC-001 (согласование CLAUDE.md с модулями) | готово, смержено (MR #3) |
 | IC-002 (зависимости, import-linter, CI) | готово, смержено (MR #4) |
 | IC-003 (настройки, часы, логи) | готово, смержено (MR #5) |
-| IC-004 (приложение FastAPI, problem+json, доступ по умолчанию) | MR на ревью |
+| IC-004 (приложение FastAPI, problem+json, доступ по умолчанию) | готово, смержено (MR #6) |
+| IC-005 (PostgreSQL, транзакции, миграции Alembic) | MR на ревью |
 | Сервисы, БД, API, frontend, Docker, CI | не начаты |
 
 Запускались только проверки backend: `pytest` (47 passed), `ruff`, `mypy --strict` — в облачном контейнере агента на Python 3.13

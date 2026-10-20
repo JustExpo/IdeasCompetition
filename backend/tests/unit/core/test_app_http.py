@@ -28,12 +28,14 @@ from app.core.middleware import (
     RequestContextMiddleware,
 )
 from app.main import create_app
+from tests.fakes import ReadyDatabase
 
 from .test_config import apply_env, base_env, clean_env  # noqa: F401 — clean_env: autouse-фикстура
 
 ORIGIN = "http://127.0.0.1:8000"
 JSON_HEADERS = {"Origin": ORIGIN, "Content-Type": "application/json"}
 SECRET_VALUE = "zz-secret-value-77"
+DB_URL = "postgresql+asyncpg://ideas@127.0.0.1:1/ideas"
 
 
 class Echo(BaseModel):
@@ -66,7 +68,7 @@ def build_probe_router() -> APIRouter:
 @pytest.fixture
 def app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     apply_env(monkeypatch, base_env())
-    application = create_app(Settings())
+    application = create_app(Settings(), database=ReadyDatabase(DB_URL))
     application.include_router(build_probe_router())
     return application
 
@@ -174,7 +176,7 @@ async def test_dev_frontend_origin_is_allowed_only_in_dev(
     apply_env(
         monkeypatch, base_env(APP_ENV="e2e", DATABASE_URL=base_env()["DATABASE_URL"] + "_e2e")
     )
-    application = create_app(Settings())
+    application = create_app(Settings(), database=ReadyDatabase(DB_URL))
     application.include_router(build_probe_router())
     transport = httpx.ASGITransport(app=application, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url=ORIGIN) as http:
