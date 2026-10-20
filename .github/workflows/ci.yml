@@ -1,0 +1,63 @@
+# Проверки каждого PR (CLAUDE.md §13, п. 1, 3, 4). Зелёный CI обязателен до мержа.
+# Integration-тесты с PostgreSQL добавляет IC-005, frontend — IC-015, образ и e2e — IC-030.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (ruff, mypy, import-linter, unit)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Установить зависимости по lock-файлу
+        run: uv sync --frozen
+      - name: ruff format
+        run: uv run ruff format --check .
+      - name: ruff check
+        run: uv run ruff check .
+      - name: mypy --strict
+        run: uv run mypy app tests
+      - name: import-linter
+        run: uv run lint-imports
+      - name: unit-тесты
+        run: uv run pytest -m unit --cov --cov-report=term-missing
+
+  security:
+    name: security (pip-audit, gitleaks)
+    runs-on: ubuntu-24.04
+    # gitleaks-action на PR читает список коммитов через API: нужен pull-requests: read.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - name: pip-audit по lock-файлу
+        working-directory: backend
+        run: |
+          uv export --frozen --no-emit-project -o "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit -r "$RUNNER_TEMP/requirements.txt" --disable-pip
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

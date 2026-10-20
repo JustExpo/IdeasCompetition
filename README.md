@@ -47,7 +47,8 @@ GitHub: https://github.com/JustExpo/IdeasCompetition
 | Структура backend и доменные модели | готово: 9 модулей + `common`, 47 unit-тестов ([CLAUDE.md §4](CLAUDE.md)) |
 | Самопроверка кода | [docs/code-review/](docs/code-review/) |
 | План разработки (31 задача) | утверждён, срок сдачи 2026-10-24 ([TODO.md](Documents/Конкурс%20идей/TODO.md)) |
-| IC-001 (согласование CLAUDE.md с модулями) | MR на ревью |
+| IC-001 (согласование CLAUDE.md с модулями) | готово, смержено (MR #3) |
+| IC-002 (зависимости, import-linter, CI) | MR на ревью |
 | Сервисы, БД, API, frontend, Docker, CI | не начаты |
 
 Запускались только проверки backend: `pytest` (47 passed), `ruff`, `mypy --strict` — в облачном контейнере агента на Python 3.13

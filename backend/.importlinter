@@ -1,0 +1,386 @@
+# Границы модулей backend — CLAUDE.md §4.2. Запуск: `uv run lint-imports`.
+# Контракты на app.core добавляются вместе с пакетом app.core (IC-003): import-linter не принимает
+# несуществующие модули. Между модулями (A != B) запрещены только dao/controller/handler чужого
+# модуля; service/model/exception чужого модуля импортировать можно — по графу ниже.
+[importlinter]
+root_packages =
+    app
+    sqlalchemy
+    fastapi
+    starlette
+    pydantic
+    asyncpg
+include_external_packages = True
+
+[importlinter:contract:layers-inside-module]
+name = Слои внутри модуля: controller|handler > service > dao > model > exception
+type = layers
+layers =
+    controller | handler
+    service
+    dao
+    model
+    exception
+containers =
+    app.user
+    app.auth
+    app.contest
+    app.idea
+    app.vote
+    app.result
+    app.reminder
+    app.notification
+    app.realtime
+
+[importlinter:contract:layers-between-modules]
+name = Граф модулей без циклов (CLAUDE.md §4.2)
+type = layers
+layers =
+    app.result | app.reminder
+    app.vote
+    app.idea | app.auth
+    app.contest | app.user
+
+[importlinter:contract:leaf-modules]
+name = notification и realtime не импортируют предметные модули
+type = forbidden
+source_modules =
+    app.notification
+    app.realtime
+forbidden_modules =
+    app.user
+    app.auth
+    app.contest
+    app.idea
+    app.vote
+    app.result
+    app.reminder
+
+[importlinter:contract:common-is-bottom]
+name = app.common не импортирует ни один модуль
+type = forbidden
+source_modules =
+    app.common
+forbidden_modules =
+    app.user
+    app.auth
+    app.contest
+    app.idea
+    app.vote
+    app.result
+    app.reminder
+    app.notification
+    app.realtime
+
+[importlinter:contract:pure-model-and-exception]
+name = model и exception без фреймворков и I/O
+type = forbidden
+source_modules =
+    app.*.model
+    app.common.model
+    app.*.exception
+    app.common.exception
+forbidden_modules =
+    sqlalchemy
+    fastapi
+    starlette
+    pydantic
+    asyncpg
+
+[importlinter:contract:service-has-no-http]
+name = service и dao не знают про HTTP
+type = forbidden
+source_modules =
+    app.*.service
+    app.*.dao
+forbidden_modules =
+    fastapi
+    starlette
+
+[importlinter:contract:controller-and-handler-skip-dao]
+name = controller и handler не ходят в dao
+type = forbidden
+source_modules =
+    app.*.controller
+    app.*.handler
+forbidden_modules =
+    app.*.dao
+
+[importlinter:contract:no-foreign-adapters-user]
+name = app.user не импортирует dao, controller и handler других модулей
+type = forbidden
+source_modules =
+    app.user
+forbidden_modules =
+    app.auth.dao
+    app.auth.controller
+    app.auth.handler
+    app.contest.dao
+    app.contest.controller
+    app.contest.handler
+    app.idea.dao
+    app.idea.controller
+    app.idea.handler
+    app.vote.dao
+    app.vote.controller
+    app.vote.handler
+    app.result.dao
+    app.result.controller
+    app.result.handler
+    app.reminder.dao
+    app.reminder.controller
+    app.reminder.handler
+    app.notification.dao
+    app.notification.controller
+    app.notification.handler
+    app.realtime.dao
+    app.realtime.controller
+    app.realtime.handler
+
+[importlinter:contract:no-foreign-adapters-auth]
+name = app.auth не импортирует dao, controller и handler других модулей
+type = forbidden
+source_modules =
+    app.auth
+forbidden_modules =
+    app.user.dao
+    app.user.controller
+    app.user.handler
+    app.contest.dao
+    app.contest.controller
+    app.contest.handler
+    app.idea.dao
+    app.idea.controller
+    app.idea.handler
+    app.vote.dao
+    app.vote.controller
+    app.vote.handler
+    app.result.dao
+    app.result.controller
+    app.result.handler
+    app.reminder.dao
+    app.reminder.controller
+    app.reminder.handler
+    app.notification.dao
+    app.notification.controller
+    app.notification.handler
+    app.realtime.dao
+    app.realtime.controller
+    app.realtime.handler
+
+[importlinter:contract:no-foreign-adapters-contest]
+name = app.contest не импортирует dao, controller и handler других модулей
+type = forbidden
+source_modules =
+    app.contest
+forbidden_modules =
+    app.user.dao
+    app.user.controller
+    app.user.handler
+    app.auth.dao
+    app.auth.controller
+    app.auth.handler
+    app.idea.dao
+    app.idea.controller
+    app.idea.handler
+    app.vote.dao
+    app.vote.controller
+    app.vote.handler
+    app.result.dao
+    app.result.controller
+    app.result.handler
+    app.reminder.dao
+    app.reminder.controller
+    app.reminder.handler
+    app.notification.dao
+    app.notification.controller
+    app.notification.handler
+    app.realtime.dao
+    app.realtime.controller
+    app.realtime.handler
+
+[importlinter:contract:no-foreign-adapters-idea]
+name = app.idea не импортирует dao, controller и handler других модулей
+type = forbidden
+source_modules =
+    app.idea
+forbidden_modules =
+    app.user.dao
+    app.user.controller
+    app.user.handler
+    app.auth.dao
+    app.auth.controller
+    app.auth.handler
+    app.contest.dao
+    app.contest.controller
+    app.contest.handler
+    app.vote.dao
+    app.vote.controller
+    app.vote.handler
+    app.result.dao
+    app.result.controller
+    app.result.handler
+    app.reminder.dao
+    app.reminder.controller
+    app.reminder.handler
+    app.notification.dao
+    app.notification.controller
+    app.notification.handler
+    app.realtime.dao
+    app.realtime.controller
+    app.realtime.handler
+
+[importlinter:contract:no-foreign-adapters-vote]
+name = app.vote не импортирует dao, controller и handler других модулей
+type = forbidden
+source_modules =
+    app.vote
+forbidden_modules =
+    app.user.dao
+    app.user.controller
+    app.user.handler
+    app.auth.dao
+    app.auth.controller
+    app.auth.handler
+    app.contest.dao
+    app.contest.controller
+    app.contest.handler
+    app.idea.dao
+    app.idea.controller
+    app.idea.handler
+    app.result.dao
+    app.result.controller
+    app.result.handler
+    app.reminder.dao
+    app.reminder.controller
+    app.reminder.handler
+    app.notification.dao
+    app.notification.controller
+    app.notification.handler
+    app.realtime.dao
+    app.realtime.controller
+    app.realtime.handler
+
+[importlinter:contract:no-foreign-adapters-result]
+name = app.result не импортирует dao, controller и handler других модулей
+type = forbidden
+source_modules =
+    app.result
+forbidden_modules =
+    app.user.dao
+    app.user.controller
+    app.user.handler
+    app.auth.dao
+    app.auth.controller
+    app.auth.handler
+    app.contest.dao
+    app.contest.controller
+    app.contest.handler
+    app.idea.dao
+    app.idea.controller
+    app.idea.handler
+    app.vote.dao
+    app.vote.controller
+    app.vote.handler
+    app.reminder.dao
+    app.reminder.controller
+    app.reminder.handler
+    app.notification.dao
+    app.notification.controller
+    app.notification.handler
+    app.realtime.dao
+    app.realtime.controller
+    app.realtime.handler
+
+[importlinter:contract:no-foreign-adapters-reminder]
+name = app.reminder не импортирует dao, controller и handler других модулей
+type = forbidden
+source_modules =
+    app.reminder
+forbidden_modules =
+    app.user.dao
+    app.user.controller
+    app.user.handler
+    app.auth.dao
+    app.auth.controller
+    app.auth.handler
+    app.contest.dao
+    app.contest.controller
+    app.contest.handler
+    app.idea.dao
+    app.idea.controller
+    app.idea.handler
+    app.vote.dao
+    app.vote.controller
+    app.vote.handler
+    app.result.dao
+    app.result.controller
+    app.result.handler
+    app.notification.dao
+    app.notification.controller
+    app.notification.handler
+    app.realtime.dao
+    app.realtime.controller
+    app.realtime.handler
+
+[importlinter:contract:no-foreign-adapters-notification]
+name = app.notification не импортирует dao, controller и handler других модулей
+type = forbidden
+source_modules =
+    app.notification
+forbidden_modules =
+    app.user.dao
+    app.user.controller
+    app.user.handler
+    app.auth.dao
+    app.auth.controller
+    app.auth.handler
+    app.contest.dao
+    app.contest.controller
+    app.contest.handler
+    app.idea.dao
+    app.idea.controller
+    app.idea.handler
+    app.vote.dao
+    app.vote.controller
+    app.vote.handler
+    app.result.dao
+    app.result.controller
+    app.result.handler
+    app.reminder.dao
+    app.reminder.controller
+    app.reminder.handler
+    app.realtime.dao
+    app.realtime.controller
+    app.realtime.handler
+
+[importlinter:contract:no-foreign-adapters-realtime]
+name = app.realtime не импортирует dao, controller и handler других модулей
+type = forbidden
+source_modules =
+    app.realtime
+forbidden_modules =
+    app.user.dao
+    app.user.controller
+    app.user.handler
+    app.auth.dao
+    app.auth.controller
+    app.auth.handler
+    app.contest.dao
+    app.contest.controller
+    app.contest.handler
+    app.idea.dao
+    app.idea.controller
+    app.idea.handler
+    app.vote.dao
+    app.vote.controller
+    app.vote.handler
+    app.result.dao
+    app.result.controller
+    app.result.handler
+    app.reminder.dao
+    app.reminder.controller
+    app.reminder.handler
+    app.notification.dao
+    app.notification.controller
+    app.notification.handler
