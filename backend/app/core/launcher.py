@@ -83,7 +83,7 @@ async def serve(settings: Settings) -> int:
         await asyncio.to_thread(run_migrations, url)
         await database.ensure_schema_is_current()
 
-        app = create_app(settings, database, singleton)
+        app = create_app(settings, database, singleton, bootstrap_organizer=True)
         server = DrainingServer(
             uvicorn.Config(
                 app,

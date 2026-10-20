@@ -3,8 +3,10 @@
 from app.common.exception.errors import (
     AppError,
     DomainValidationError,
+    ForbiddenError,
     InvalidJsonError,
     NotAuthenticatedError,
+    OrganizerCannotParticipateError,
     OriginNotAllowedError,
     PayloadTooLargeError,
     ServiceUnavailableError,
@@ -14,8 +16,10 @@ from app.common.exception.errors import (
 __all__ = [
     "AppError",
     "DomainValidationError",
+    "ForbiddenError",
     "InvalidJsonError",
     "NotAuthenticatedError",
+    "OrganizerCannotParticipateError",
     "OriginNotAllowedError",
     "PayloadTooLargeError",
     "ServiceUnavailableError",

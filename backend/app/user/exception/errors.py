@@ -1,6 +1,8 @@
 """Ошибки регистрации и участия пользователя."""
 
-from app.common.exception import AppError
+from app.common.exception import AppError, OrganizerCannotParticipateError
+
+__all__ = ["EmailDomainNotAllowedError", "EmailTakenError", "OrganizerCannotParticipateError"]
 
 
 class EmailTakenError(AppError):
@@ -11,10 +13,3 @@ class EmailTakenError(AppError):
 class EmailDomainNotAllowedError(AppError):
     code = "email_domain_not_allowed"
     status = 422
-
-
-class OrganizerCannotParticipateError(AppError):
-    """Организатор видит результаты заранее, поэтому не подаёт идеи и не голосует."""
-
-    code = "organizer_cannot_participate"
-    status = 403

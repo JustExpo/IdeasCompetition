@@ -5,14 +5,22 @@
 или публичный маршрут не входит в явный allow-list.
 """
 
+from collections.abc import Awaitable, Callable
 from enum import StrEnum
+from typing import Protocol
 
 from fastapi import Depends, FastAPI, params
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute, APIWebSocketRoute
+from starlette.requests import HTTPConnection
 from starlette.routing import BaseRoute
 
-from app.common.exception import NotAuthenticatedError
+from app.common.exception import (
+    ForbiddenError,
+    NotAuthenticatedError,
+    OrganizerCannotParticipateError,
+)
+from app.core.logging import bind_log_context
 
 API_PREFIX = "/api"
 
@@ -32,19 +40,51 @@ class RoutePolicyError(RuntimeError):
     """Маршрут объявлен без политики доступа или с недопустимой публичной."""
 
 
-class RequirePolicy:
-    """Зависимость-маркер политики.
+class Principal(Protocol):
+    """Действующее лицо в терминах `core`: ядро не знает модуль `auth`, только эти два поля."""
 
-    Пока нет сессий (IC-007), любая политика кроме `PUBLIC` отвечает 401: маршрут,
-    который забыли подключить к проверке личности, закрыт, а не открыт.
+    @property
+    def user_id(self) -> int: ...
+
+    @property
+    def role(self) -> str: ...
+
+
+# Резолвер подключает `main.py` (`app.state.actor_resolver`): по запросу или WebSocket-рукопожатию
+# возвращает действующее лицо или `None`, если сессии нет, она истекла или отозвана.
+ActorResolver = Callable[[HTTPConnection], Awaitable[Principal | None]]
+
+ORGANIZER_ROLE = "organizer"
+EMPLOYEE_ROLE = "employee"
+
+
+class RequirePolicy:
+    """Зависимость-маркер политики и её проверка.
+
+    Порядок: нет входа → 401; вошёл, но роль не подходит → 403. Если резолвер не подключён
+    (тесты, неполная сборка), любая политика кроме `PUBLIC` отвечает 401: маршрут, который
+    забыли подключить к проверке личности, закрыт, а не открыт.
     """
 
     def __init__(self, policy: Policy) -> None:
         self.policy = policy
 
-    async def __call__(self) -> None:
-        if self.policy is not Policy.PUBLIC:
+    async def __call__(self, connection: HTTPConnection) -> None:
+        if self.policy is Policy.PUBLIC:
+            return
+        resolver: ActorResolver | None = getattr(connection.app.state, "actor_resolver", None)
+        actor = None
+        if resolver is not None and self.policy is not Policy.E2E_ONLY:
+            actor = await resolver(connection)
+        if actor is None:
             raise NotAuthenticatedError("Требуется вход в систему.")
+        connection.state.actor = actor
+        bind_log_context(user_id=actor.user_id)
+        if self.policy is Policy.ORGANIZER and actor.role != ORGANIZER_ROLE:
+            raise ForbiddenError("Действие доступно только организатору.")
+        if self.policy is Policy.EMPLOYEE and actor.role != EMPLOYEE_ROLE:
+            # Организатор видит результаты заранее, поэтому в конкурсе не участвует (§9.2).
+            raise OrganizerCannotParticipateError("Организатор не подаёт идеи и не голосует.")
 
 
 def require(policy: Policy) -> params.Depends:

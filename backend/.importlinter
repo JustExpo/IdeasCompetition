@@ -1,3 +1,6 @@
+# Запрещающие контракты слоёв и модулей проверяют ПРЯМЫЕ импорты (allow_indirect_imports):
+# service вызывает dao, а controller вызывает service, поэтому цепочка controller → service → dao
+# и service одного модуля → service другого → его dao — это законный путь, а не нарушение.
 # Границы модулей backend — CLAUDE.md §4.2. Запуск: `uv run lint-imports`.
 # Между модулями (A != B) запрещены только dao/controller/handler чужого
 # модуля; service/model/exception чужого модуля импортировать можно — по графу ниже.
@@ -100,6 +103,7 @@ forbidden_modules =
 [importlinter:contract:controller-and-handler-skip-dao]
 name = controller и handler не ходят в dao
 type = forbidden
+allow_indirect_imports = True
 source_modules =
     app.*.controller
     app.*.handler
@@ -109,6 +113,7 @@ forbidden_modules =
 [importlinter:contract:no-foreign-adapters-user]
 name = app.user не импортирует dao, controller и handler других модулей
 type = forbidden
+allow_indirect_imports = True
 source_modules =
     app.user
 forbidden_modules =
@@ -140,6 +145,7 @@ forbidden_modules =
 [importlinter:contract:no-foreign-adapters-auth]
 name = app.auth не импортирует dao, controller и handler других модулей
 type = forbidden
+allow_indirect_imports = True
 source_modules =
     app.auth
 forbidden_modules =
@@ -171,6 +177,7 @@ forbidden_modules =
 [importlinter:contract:no-foreign-adapters-contest]
 name = app.contest не импортирует dao, controller и handler других модулей
 type = forbidden
+allow_indirect_imports = True
 source_modules =
     app.contest
 forbidden_modules =
@@ -202,6 +209,7 @@ forbidden_modules =
 [importlinter:contract:no-foreign-adapters-idea]
 name = app.idea не импортирует dao, controller и handler других модулей
 type = forbidden
+allow_indirect_imports = True
 source_modules =
     app.idea
 forbidden_modules =
@@ -233,6 +241,7 @@ forbidden_modules =
 [importlinter:contract:no-foreign-adapters-vote]
 name = app.vote не импортирует dao, controller и handler других модулей
 type = forbidden
+allow_indirect_imports = True
 source_modules =
     app.vote
 forbidden_modules =
@@ -264,6 +273,7 @@ forbidden_modules =
 [importlinter:contract:no-foreign-adapters-result]
 name = app.result не импортирует dao, controller и handler других модулей
 type = forbidden
+allow_indirect_imports = True
 source_modules =
     app.result
 forbidden_modules =
@@ -295,6 +305,7 @@ forbidden_modules =
 [importlinter:contract:no-foreign-adapters-reminder]
 name = app.reminder не импортирует dao, controller и handler других модулей
 type = forbidden
+allow_indirect_imports = True
 source_modules =
     app.reminder
 forbidden_modules =
@@ -326,6 +337,7 @@ forbidden_modules =
 [importlinter:contract:no-foreign-adapters-notification]
 name = app.notification не импортирует dao, controller и handler других модулей
 type = forbidden
+allow_indirect_imports = True
 source_modules =
     app.notification
 forbidden_modules =
@@ -357,6 +369,7 @@ forbidden_modules =
 [importlinter:contract:no-foreign-adapters-realtime]
 name = app.realtime не импортирует dao, controller и handler других модулей
 type = forbidden
+allow_indirect_imports = True
 source_modules =
     app.realtime
 forbidden_modules =
@@ -388,6 +401,7 @@ forbidden_modules =
 [importlinter:contract:core-is-infrastructure]
 name = app.core не импортирует предметные модули (только app.common разрешён)
 type = forbidden
+allow_indirect_imports = True
 source_modules =
     app.core
 forbidden_modules =

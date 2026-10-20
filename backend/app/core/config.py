@@ -12,12 +12,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import EmailStr, Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from app.common.model import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, is_password_length_valid
+
 AppEnv = Literal["dev", "e2e", "prod"]
 
 # Совпадает с `.env.example`: в prod такой пароль считается незаменённой заглушкой.
 EXAMPLE_ORGANIZER_PASSWORD: Final = "dev-only-change-me-organizer"  # noqa: S105 — заглушка, не секрет
-PASSWORD_MIN_LENGTH: Final = 10
-PASSWORD_MAX_LENGTH: Final = 128
 PROD_ORGANIZER_PASSWORD_MIN_LENGTH: Final = 16
 DEV_FRONTEND_ORIGIN: Final = "http://localhost:5173"
 CONFIG_EXIT_CODE: Final = 2
@@ -114,7 +114,7 @@ def collect_environment_problems(settings: Settings) -> list[str]:
         problems.append("DATABASE_URL: адрес не разобран")
 
     password = settings.organizer_password.get_secret_value()
-    if not PASSWORD_MIN_LENGTH <= len(password) <= PASSWORD_MAX_LENGTH:
+    if not is_password_length_valid(password):
         problems.append(
             f"ORGANIZER_PASSWORD: длина от {PASSWORD_MIN_LENGTH} до {PASSWORD_MAX_LENGTH} символов"
         )
