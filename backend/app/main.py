@@ -8,7 +8,7 @@ from fastapi import FastAPI
 
 from app.auth.controller import resolve_request_actor
 from app.auth.controller import router as auth_router
-from app.auth.service import PasswordService, ensure_organizer
+from app.auth.service import AttemptLimiter, PasswordService, ensure_organizer
 from app.core.access import ensure_routes_have_policy
 from app.core.clock import Clock, SystemClock
 from app.core.config import Settings
@@ -32,6 +32,7 @@ def create_app(
     singleton: SingletonLock | None = None,
     clock: Clock | None = None,
     passwords: PasswordService | None = None,
+    limiter: AttemptLimiter | None = None,
     bootstrap_organizer: bool = False,
 ) -> FastAPI:
     """`database`, `clock`, `passwords` подменяются в тестах; по умолчанию создаются из настроек
@@ -40,6 +41,7 @@ def create_app(
     database = database or Database(settings.database_url.get_secret_value())
     clock = clock or SystemClock()
     passwords = passwords or PasswordService()
+    limiter = limiter or AttemptLimiter(per_ip_enabled=settings.rate_limit_per_ip_enabled)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -70,6 +72,7 @@ def create_app(
     app.state.draining = False
     app.state.clock = clock
     app.state.passwords = passwords
+    app.state.limiter = limiter
     app.state.actor_resolver = resolve_request_actor
 
     install_error_handlers(app)

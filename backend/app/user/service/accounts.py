@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.model import UserId
 from app.user import dao
+from app.user.exception import EmailTakenError
 from app.user.model import EnsuredUser, User, UserCredentials, UserRole, normalize_email
 
 
@@ -31,6 +32,26 @@ async def ensure_user(
     if credentials is None:  # недостижимо: запись либо вставлена, либо уже была
         raise RuntimeError("учётная запись не найдена после вставки")
     return EnsuredUser(credentials.user, created)
+
+
+async def register_employee(
+    session: AsyncSession, *, email: str, name: str, password_hash: str, now: datetime
+) -> User:
+    """Создать сотрудника; занятый адрес (в любом регистре) — `EmailTakenError`."""
+    created = await dao.insert_user_if_absent(
+        session,
+        email=email,
+        name=name,
+        password_hash=password_hash,
+        role=UserRole.EMPLOYEE,
+        created_at=now,
+    )
+    if not created:
+        raise EmailTakenError("Этот адрес уже зарегистрирован.")
+    credentials = await dao.select_credentials_by_email(session, email)
+    if credentials is None:  # недостижимо: запись только что вставлена в этой транзакции
+        raise RuntimeError("учётная запись не найдена после вставки")
+    return credentials.user
 
 
 async def find_credentials(session: AsyncSession, email: str) -> UserCredentials | None:

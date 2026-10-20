@@ -8,3 +8,18 @@ class InvalidCredentialsError(AppError):
 
     code = "invalid_credentials"
     status = 401
+
+
+class TooManyAttemptsError(AppError):
+    """Слишком много попыток; клиент повторяет позже (заголовок Retry-After)."""
+
+    code = "too_many_attempts"
+    status = 429
+
+
+class TooManyLoginAttemptsError(TooManyAttemptsError):
+    retry_after = 15 * 60
+
+
+class TooManyRegistrationsError(TooManyAttemptsError):
+    retry_after = 60 * 60

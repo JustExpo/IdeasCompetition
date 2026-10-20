@@ -12,6 +12,7 @@ from app.auth import dao
 from app.auth.exception import InvalidCredentialsError
 from app.auth.model import Actor
 from app.auth.service.passwords import PasswordService
+from app.auth.service.rate_limit import AttemptLimiter
 from app.common.model import PASSWORD_MAX_LENGTH, normalize_password
 from app.core.clock import Clock
 from app.core.db import Database
@@ -42,7 +43,48 @@ def hash_session_token(token: str) -> bytes:
     return hashlib.sha256(token.encode("utf-8")).digest()
 
 
+async def open_session(
+    session: AsyncSession, user: User, token: str, now: datetime
+) -> IssuedSession:
+    """Записать сессию в уже открытой транзакции (вход и автовход после регистрации)."""
+    expires_at = now + SESSION_LIFETIME
+    await dao.insert_session(
+        session,
+        token_hash=hash_session_token(token),
+        user_id=user.id,
+        created_at=now,
+        expires_at=expires_at,
+    )
+    return IssuedSession(token=token, expires_at=expires_at, user=user)
+
+
 async def log_in(
+    database: Database,
+    passwords: PasswordService,
+    clock: Clock,
+    limiter: AttemptLimiter,
+    client_ip: str,
+    email: str,
+    password: str,
+) -> IssuedSession:
+    """Проверить e-mail и пароль и выдать новую сессию.
+
+    Неудачные попытки считаются на (e-mail, IP); при превышении лимита вход отвечает 429 до
+    всякой работы с паролем.
+
+    Неизвестный адрес, неверный пароль, неактивный пользователь и слишком длинный пароль
+    дают одну и ту же ошибку. Хэширование идёт вне транзакции, чтобы не держать соединение
+    пула на время вычисления.
+    """
+    limiter.ensure_login_allowed(email, client_ip)
+    try:
+        return await _verify_and_issue(database, passwords, clock, email=email, password=password)
+    except InvalidCredentialsError:
+        limiter.record_failed_login(email, client_ip)
+        raise
+
+
+async def _verify_and_issue(
     database: Database,
     passwords: PasswordService,
     clock: Clock,
@@ -50,12 +92,6 @@ async def log_in(
     email: str,
     password: str,
 ) -> IssuedSession:
-    """Проверить e-mail и пароль и выдать новую сессию.
-
-    Неизвестный адрес, неверный пароль, неактивный пользователь и слишком длинный пароль
-    дают одну и ту же ошибку. Хэширование идёт вне транзакции, чтобы не держать соединение
-    пула на время вычисления.
-    """
     normalized = normalize_password(password)
     if len(normalized) > PASSWORD_MAX_LENGTH:
         raise InvalidCredentialsError("Неверный e-mail или пароль.")
@@ -84,15 +120,7 @@ async def log_in(
         user = await user_service.get_user(session, user_id)
         if user is None or not user.is_active:  # деактивирован, пока считался хэш
             raise InvalidCredentialsError("Неверный e-mail или пароль.")
-        expires_at = now + SESSION_LIFETIME
-        await dao.insert_session(
-            session,
-            token_hash=hash_session_token(token),
-            user_id=user_id,
-            created_at=now,
-            expires_at=expires_at,
-        )
-        return IssuedSession(token=token, expires_at=expires_at, user=user)
+        return await open_session(session, user, token, now)
 
     issued = await database.run_in_transaction(issue)
     _log.info("login_succeeded", user_id=int(user_id))
