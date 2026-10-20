@@ -4,9 +4,9 @@
 обязательные правила и журнал решений. Подробные обоснования, матрица пограничных случаев и runbook
 вынесены в `docs/` (ссылки ниже). Ключевые решения и обязательные правила остаются здесь.
 
-> **Статус: этап 2 — архитектура и правила разработки предложены и ждут согласования владельца; реализация не начата.**
-> Всё, что описано ниже как структура, команды и механизмы, — **предлагаемое состояние**.
-> Ни одна команда из этого документа ещё не запускалась; это помечено словом «(план)».
+> **Статус: этап 2 (архитектура) ждёт согласования владельца; по его указанию начат этап 4а — структура пакетов backend и доменные модели с unit-тестами.**
+> Всё, что описано ниже как структура, команды и механизмы, — **предлагаемое состояние**, кроме явно помеченного «(проверено)».
+> Проверено на сегодня только: `pytest`, `ruff`, `mypy --strict` для `backend/` (§2.1). Остальные команды помечены «(план)».
 > Каждый следующий этап начинается только по указанию владельца проекта (Ilia).
 
 ## 0. Как пользоваться документом
@@ -25,6 +25,7 @@
 | Наблюдаемость, CI, восстановление | §13 |
 | Пограничные случаи | `docs/edge-cases.md` |
 | Почему решения именно такие (три прохода анализа) | `docs/architecture-review.md` |
+| Как проверить свой код перед коммитом (самопроверка Senior) | §6.5 |
 | Когда изменение готово | §14 (Definition of Done) |
 | Как вести отчёт для сдачи | §15–§18 |
 
@@ -110,6 +111,12 @@
 - Есть: `CLAUDE.md`, `README.md`, `docs/`, `tools/export_agent_session.py`, `.gitignore`; шаблонный `main.py` от PyCharm (вне git); `.venv` с системным Python 3.9.6 (не подходит, нужен 3.12); `.idea/` (вне git).
 - Нет: исходников, тестов, зависимостей, lock-файлов, Docker, миграций, CI, AGENTS.md.
 - git: коммиты только с документацией; remote не настроен.
+
+Обновлено 2026-10-20 05:45 UTC:
+- `backend/app/` — пакеты 9 модулей по §4 со слоями `model/service/exception/controller/dao/handler`; написаны только `model` и `exception` (доменные модели), остальные слои — пустые пакеты с описанием назначения.
+- `backend/tests/unit/` — 47 unit-тестов моделей; `backend/pyproject.toml` — pytest, ruff, mypy (зависимости рантайма — на этапе каркаса).
+- Проверено в облачном контейнере агента (Python 3.13, `target-version`/`python_version` = 3.12): `python3 -m pytest` — 47 passed; `ruff check .`, `ruff format --check .` — без замечаний; `mypy app tests` (strict) — без ошибок. На Mac владельца не запускалось: там нет Python 3.12 и `uv` (проверка — этап каркаса).
+- git: GitHub `https://github.com/JustExpo/IdeasCompetition`, ветка `main`.
 - Не проверено: наличие Docker Desktop, `uv`, Node.js на Mac владельца.
 
 ### 2.2 Предлагаемое
@@ -120,9 +127,10 @@
 Каждый этап — отдельный коммит и согласование.
 
 1. ✓ План и требования к отчёту.
-2. ✓ Архитектура и правила разработки (этот документ). ← сейчас
+2. ✓ Архитектура и правила разработки (этот документ), ждёт согласования.
+4а. ✓ (по указанию владельца раньше каркаса) Структура пакетов backend по модулям и доменные модели с unit-тестами. ← сейчас
 3. Каркас: `compose.yaml`, Dockerfile, `Makefile`, `scripts/`, пустой FastAPI с `/api/health`, Alembic, CI-заготовка, singleton-проверки. Удалить `main.py`.
-4. Домен (`domain/`): фазы, политики, ранжирование, напоминания — с unit-тестами.
+4. Домен: политики доступа (`<модуль>/model/policy.py`), выбор получателей напоминаний — с unit-тестами (фазы, ранжирование, окно напоминания уже есть с этапа 4а).
 5. Пользователи и вход: регистрация, сессии, роли, rate limit, CLI.
 6. Конкурсы, идеи, голоса: сервисы, БД, API, integration-тесты.
 7. Реальное время: шина, WebSocket-хаб, экран организатора.
@@ -145,12 +153,12 @@
 ```
  Браузер (вкладки A, B, организатор)       Контейнер app (1 процесс uvicorn, workers=1)
  ┌──────────────────────────┐  HTTP /api  ┌───────────────────────────────────────────────┐
- │ SPA React + TanStack     │ ──────────▶ │ api ──▶ services ──▶ domain (чистые правила)  │
+ │ SPA React + TanStack     │ ──────────▶ │ controller ──▶ service ──▶ dao ──▶ model      │
  │ Query                    │ ◀────────── │            │                                   │
- │ api/events.ts (WS)       │ ◀── WS ──── │ realtime.hub ◀── bus ◀── services (после commit)
+ │ api/events.ts (WS)       │ ◀── WS ──── │ realtime (хаб ◀ шина) ◀── service (после commit)
  └──────────────────────────┘  сигналы    │            │ db (пул asyncpg) ────────────────┼──▶ db: PostgreSQL 16
-        ▲ GET / → index.html             │ jobs.scheduler (тик 15 с) ──▶ services         │
-        └── статика SPA из того же образа │ jobs.outbox_dispatcher ──▶ mail (SMTP) ───────┼──▶ mailpit (SMTP + веб :8025)
+        ▲ GET / → index.html             │ core.scheduler (тик 15 с) ──▶ <модуль>.handler │
+        └── статика SPA из того же образа │ notification.handler ──▶ SMTP ────────────────┼──▶ mailpit (SMTP + веб :8025)
                                           └───────────────────────────────────────────────┘
 ```
 
@@ -166,7 +174,7 @@
 | # | Решение | Причина | Альтернативы | Ограничения | Проверка |
 |---|---|---|---|---|---|
 | Р1 | Один контейнер `app`: FastAPI отдаёт API и собранный SPA; frontend — отдельный код и сборка | Инвариант «один контейнер приложения» (§12) + О1; один origin убирает CORS и упрощает CSRF | Отдельный nginx-контейнер frontend — нарушает инвариант | Проверяющий может счесть frontend «не отдельным» — README объясняет | Сборка образа; e2e через порт app |
-| Р2 | Модульный монолит со слоями `api/jobs/cli → services → adapters → domain` | Правила ТЗ тестируются без БД и сети; транспорт и хранилище не протекают в правила | Плоская структура; hexagonal с портами на каждый репозиторий | Интерфейсы (Protocol) только для `Clock`, `EmailSender`, `EventPublisher` | `lint-imports` в CI |
+| Р2 | Модульный монолит; с 05:35 по указанию владельца — модули по частям логики, в каждом слои `controller/handler → service → dao → model → exception` (§4.2); исходный вариант `api/jobs/cli → services → adapters → domain` заменён | Правила ТЗ тестируются без БД и сети; транспорт и хранилище не протекают в правила | Плоская структура; hexagonal с портами на каждый репозиторий | Интерфейсы (Protocol) только для `Clock`, `EmailSender`, `EventPublisher` | `lint-imports` в CI |
 | Р3 | Фаза вычисляется из времени, `now < deadline` — раунд открыт | Закрытию «нечему не сработать» (П1) | Хранимый флаг + планировщик | Точность писем ± тик | unit на границах |
 | Р4 | Время — часы приложения `Clock`, читаются после блокировки и заново при повторе транзакции | Тестируемость; `now()` PostgreSQL — время начала транзакции | `now()`/`clock_timestamp()` БД | Один процесс — одни часы | int с FakeClock; ruff `banned-api` |
 | Р5 | Инварианты в БД: PK голосов, FK + CASCADE, CHECK, уникальные ключи outbox/напоминаний | Код имеет гонки, ограничение БД — нет | Проверки в коде | — | int на каждое ограничение |
@@ -208,17 +216,21 @@ IdeasCompetition/
 │   ├── pyproject.toml  uv.lock  .python-version  alembic.ini  .importlinter
 │   ├── migrations/         ← Alembic (env.py, versions/)
 │   ├── app/
-│   │   ├── main.py         ← create_app(settings): сборка слоёв, lifespan, SPA
+│   │   ├── main.py         ← create_app(settings): сборка модулей, lifespan, SPA (этап каркаса)
 │   │   ├── cli.py          ← create-organizer, reset-password, revoke-sessions, status, export-openapi
-│   │   ├── core/           ← config.py, clock.py, logging.py, errors.py
-│   │   ├── domain/         ← phase.py, policies.py, ranking.py, reminders.py, limits.py, types.py, errors.py
-│   │   ├── services/       ← auth, contests, ideas, votes, results, finalization, reminders, _tx.py
-│   │   ├── db/             ← engine.py, models.py, queries/*.py, errors.py, singleton_lock.py
-│   │   ├── security/       ← passwords.py, tokens.py, origin.py, rate_limit.py
-│   │   ├── realtime/       ← bus.py, hub.py
-│   │   ├── mail/           ← sender.py, templates.py
-│   │   ├── jobs/           ← scheduler.py, outbox_dispatcher.py
-│   │   └── api/            ← deps.py, errors.py, spa.py, routers/*.py, schemas/*.py
+│   │   ├── core/           ← инфраструктура без бизнес-логики: config, clock, logging, db (engine,
+│   │   │                     run_in_transaction), http_errors (AppError → problem+json), scheduler (цикл тиков)
+│   │   ├── common/         ← общее для всех модулей: model/ (идентификаторы, время, текст), exception/ (AppError)
+│   │   ├── user/           ← пользователь и роль, регистрация
+│   │   ├── auth/           ← вход, сессии, действующее лицо запроса (Actor), rate limit
+│   │   ├── contest/        ← конкурс, расписание, фаза
+│   │   ├── idea/           ← подача, правка, удаление идеи, лимиты, идемпотентность
+│   │   ├── vote/           ← голос и его отзыв
+│   │   ├── result/         ← подсчёт, ранжирование, правило ничьей, финализация
+│   │   ├── reminder/       ← напоминания за сутки до закрытия раунда
+│   │   ├── notification/   ← outbox писем, шаблоны, отправка SMTP
+│   │   └── realtime/       ← события «перечитай», шина, WebSocket-хаб
+│   │       (в каждом модуле: model/ service/ exception/ controller/ dao/ handler/ — §4.2)
 │   └── tests/              ← unit/, integration/, api/, contract/, fakes.py, conftest.py
 ├── frontend/
 │   ├── package.json  package-lock.json  .nvmrc  vite.config.ts  tsconfig.json
@@ -227,22 +239,41 @@ IdeasCompetition/
 └── e2e/                    ← Playwright: package.json, playwright.config.ts, tests/
 ```
 
-### 4.2 Слои и направление зависимостей (backend)
+### 4.2 Модули, слои и направление зависимостей (backend)
+
+Решение владельца (2026-10-20 05:29): backend делится на **модули по частям логики** (пакет на модуль),
+внутри каждого модуля — одинаковые слои. Модуль называется по сущности, которой он владеет, поэтому
+по пути видно, к чему относится модель: `app/idea/model/idea.py` — идея, `app/vote/model/vote.py` — голос.
+
+| Слой | Что лежит | Что можно импортировать | Запрещено |
+|---|---|---|---|
+| `model` | Доменные модели (frozen dataclass), перечисления, константы-лимиты, чистые правила (`phase_at`, `rank_ideas`, `policy.py`) | `common.model`, `common.exception`, своё `exception`, `model` других модулей | I/O, `sqlalchemy`, `fastapi`, `starlette`, `pydantic`, `asyncpg`, `app.core`; чтение часов — время приходит аргументом `now` |
+| `exception` | Исключения модуля: наследники `AppError` с `code` (lower_snake_case) и HTTP `status` | `common.exception` | всё остальное |
+| `dao` | Таблицы SQLAlchemy и запросы модуля; перевод `IntegrityError` в исключения модуля по имени constraint | свои `model`, `exception`; `core.db` | `fastapi`; `dao` других модулей; `commit()` |
+| `service` | Сценарии: транзакция через `core.db.run_in_transaction`, блокировки, проверка прав, постановка писем, публикация событий после commit | свои `model`, `exception`, `dao`; `model`, `exception`, `service` других модулей; `core` | `fastapi`, `starlette`; `dao`/`controller`/`handler` других модулей |
+| `controller` | HTTP- и WebSocket-маршруты FastAPI и схемы запросов/ответов (Pydantic) | свои `service`, `model`, `exception`; `auth.service` (действующее лицо); `core` | `dao` (свой и чужой); SQL; бизнес-правила |
+| `handler` | Реакции на события, не являющиеся HTTP-запросом: тики планировщика и события шины модуля; особые случаи перевода исключений модуля в HTTP (общий перевод `AppError` → problem+json один, в `core.http_errors`) | свои `service`, `exception`; `core` | `dao`; бизнес-правила |
+
+Направление внутри модуля: `controller | handler → service → dao → model → exception`. Нижний слой
+никогда не импортирует верхний.
+
+Направление между модулями (без циклов):
 
 ```
-app.main                         ← composition root, единственный импортирует всё
-app.api | app.jobs | app.cli     ← точки входа
-app.services                     ← сценарии: транзакции, объектная авторизация, события, outbox
-app.db | app.mail | app.realtime | app.security   ← адаптеры, независимы друг от друга
-app.domain                       ← чистые правила, без I/O, без фреймворков
-app.core                         ← config, clock, logging; домену запрещён
+common  ←  user  ←  auth
+           user, contest  ←  idea  ←  vote  ←  result
+           contest  ←  reminder
+           notification, realtime  ← вызываются сервисами других модулей и сами их не импортируют
+core    ←  все модули (только service, dao, controller, handler); core не импортирует модули, кроме main.py
 ```
 
-Обязательные правила (проверяет `lint-imports`, конфиг — `docs/architecture-review.md`):
-- `app.domain` не импортирует `sqlalchemy`, `fastapi`, `starlette`, `pydantic`, `asyncpg`, `app.core.config`, `app.core.clock`; время получает аргументом `now`.
-- `app.services` не импортирует `fastapi`/`starlette`.
-- Адаптеры не импортируют друг друга.
-- `app.api.routers.testing` (тестовые часы) никем не импортируется, кроме `app.main`, который подключает его только при `APP_ENV=e2e`; сам роутер импортирует лишь `app.core.clock` и `app.api.deps`.
+Обязательные правила (проверяет `lint-imports`; конфиг `.importlinter` — на этапе каркаса, план контрактов ниже):
+- `layers` для каждого модуля: `controller | handler` > `service` > `dao` > `model` > `exception`.
+- `forbidden`: `app.*.model` и `app.*.exception` не импортируют `sqlalchemy`, `fastapi`, `starlette`, `pydantic`, `asyncpg`, `app.core`.
+- `forbidden`: `app.<A>.*` не импортирует `app.<B>.dao`, `app.<B>.controller`, `app.<B>.handler` для A ≠ B.
+- `forbidden`: `app.common` не импортирует ни один модуль; `app.core` — ни один модуль.
+- `layers` между модулями по графу выше; `app.notification` и `app.realtime` не импортируют предметные модули.
+- `app.core.testing` (тестовые часы для e2e) никем не импортируется, кроме `app.main`, который подключает его только при `APP_ENV=e2e`.
 - Циклических импортов нет; относительные импорты выше пакета запрещены (ruff `TID252`).
 
 Frontend: `pages → features → api | shared`; `features/*` не импортируют друг друга; `fetch` и
@@ -253,29 +284,32 @@ Frontend: `pages → features → api | shared`; `features/*` не импорт�
 
 | Побочный эффект | Единственный владелец |
 |---|---|
-| Транзакция БД (begin/commit, повтор при дедлоке) | `services/_tx.py::run_in_transaction` |
-| Чтение времени | `core.clock.Clock`; домен получает `now` аргументом |
-| Публикация события | сервис, **после** commit |
-| Постановка письма | сервис, **внутри** транзакции (outbox) |
-| Отправка SMTP | `jobs.outbox_dispatcher` → `mail.SmtpEmailSender` |
-| Финализация, напоминания | `jobs.scheduler` → `services.finalization`, `services.reminders` |
-| Перевод ошибок в HTTP | `api/errors.py` |
-| Перевод ошибок БД в доменные | `db/errors.py` (по имени constraint) |
+| Транзакция БД (begin/commit, повтор при дедлоке) | `core/db.py::run_in_transaction`, вызывает только `service` |
+| Чтение времени | `core/clock.py::Clock`; `model` получает `now` аргументом |
+| Публикация события | `service` модуля, **после** commit, через `realtime.service` |
+| Постановка письма | `service` модуля, **внутри** транзакции, через `notification.service` (outbox) |
+| Отправка SMTP | `notification/handler` (тик и событие «есть письма») → `notification/service` |
+| Финализация, напоминания | `core/scheduler.py` вызывает `result/handler`, `reminder/handler` → их `service` |
+| Перевод ошибок в HTTP | `core/http_errors.py` (по `code`/`status` исключения); особые случаи — `handler` модуля |
+| Перевод ошибок БД в доменные | `dao` модуля (по имени constraint) |
 
 ### 4.4 Куда класть новый код
 
 | Изменение | Куда |
 |---|---|
-| Новое правило «кто/когда может» | `domain/policies.py` + unit-тест на границы; если видно в UI — поле `allowed_actions` |
-| Новый сценарий записи | функция в `services/<агрегат>.py`, транзакция через `run_in_transaction` |
-| Новый SQL | `db/queries/<агрегат>.py`; изменение схемы — миграция Alembic |
-| Новый эндпоинт | `api/routers/<ресурс>.py` + схема в `api/schemas/` + политика доступа + регенерация контракта |
-| Новое письмо | `mail/templates.py` + `dedup_key` вида `<kind>:<contest>:<user>` + постановка из сервиса |
-| Новая периодическая задача | функция в `services/`, вызов из `jobs/scheduler.py` (не новый процесс и не новый контейнер) |
-| Новое WS-событие | тип в `realtime/bus.py`, правило адресатов в `domain/policies.py`, обработчик в `frontend/src/api/events.ts` |
+| Новая сущность или понятие | `app/<модуль>/model/<сущность>.py`; модуль — тот, кто владеет сущностью; нет подходящего — новый модуль со всеми шестью слоями и запись в §17 |
+| Новое правило «кто/когда может» | `app/<модуль>/model/policy.py` + unit-тест на границы; если видно в UI — поле `allowed_actions` |
+| Новая ошибка | `app/<модуль>/exception/errors.py`: наследник `AppError` с `code` и `status` + реэкспорт в `__init__` |
+| Новый сценарий записи | функция в `app/<модуль>/service/`, транзакция через `run_in_transaction` |
+| Новый SQL | `app/<модуль>/dao/`; изменение схемы — миграция Alembic |
+| Новый эндпоинт | `app/<модуль>/controller/` + схема там же + политика доступа + регенерация контракта |
+| Новое письмо | шаблон в `app/notification/service/templates.py` + `EmailKind` + `dedup_key` вида `<kind>:<contest>:<user>` + постановка из `service` модуля-источника |
+| Новая периодическая задача | функция в `service` модуля, вызов из его `handler`, регистрация в `core/scheduler.py` (не новый процесс и не новый контейнер) |
+| Новое WS-событие | `EventType` в `app/realtime/model/event.py`, правило адресатов в `app/realtime/model/policy.py`, обработчик в `frontend/src/api/events.ts` |
 | Новый экран | `frontend/src/pages/` + логика в `features/<фича>/` |
 | Переиспользуемый UI | `shared/ui/` — только со второго использования |
-| Лимит или длина поля | `domain/limits.py` (+ CHECK в миграции) |
+| Лимит или длина поля | константа в `model` модуля (`TITLE_MAX_LENGTH` в `idea/model/idea.py`) + CHECK в миграции |
+| Общий тип или проверка для нескольких модулей | `app/common/model/` — только со второго реального использования |
 
 ---
 
@@ -335,13 +369,13 @@ state-менеджеры, библиотеки дат и форм. Любая н
 
 | Логика | Где | Хорошо | Плохо |
 |---|---|---|---|
-| Фаза из времени | `domain/phase.py` | `compute_phase(schedule, now) -> Phase` | `get_status()` |
-| Можно ли голосовать | `domain/policies.py` | `can_vote(actor, idea, phase) -> bool`, `ensure_can_vote(...) -> None` | `check_vote()` (неясно: bool или исключение) |
-| Победитель | `domain/ranking.py` | `rank_ideas(scores) -> list[RankedIdea]` | логика в роутере |
-| Кому напомнить | `domain/reminders.py` | `select_reminder_recipients(employees, participants)` | SQL в домене |
-| Голос в транзакции | `services/votes.py` | `cast_vote`, `withdraw_vote` | `session.commit()` в роутере |
-| SQL подсчёта | `db/queries/votes.py` | `count_votes_by_idea(session, contest_id)` | |
-| Схема ответа | `api/schemas/ideas.py` | `IdeaForVoting` (нет полей автора), `IdeaWithAuthor` | одна схема с `author=None` |
+| Фаза из времени | `contest/model/contest.py` | `ContestSchedule.phase_at(now) -> ContestPhase` | `get_status()` |
+| Можно ли голосовать | `vote/model/policy.py` | `can_vote(actor, idea, phase) -> bool`, `ensure_can_vote(...) -> None` | `check_vote()` (неясно: bool или исключение) |
+| Победитель | `result/model/ranking.py` | `rank_ideas(scores) -> tuple[RankedIdea, ...]` | логика в контроллере |
+| Кому напомнить | `reminder/model/reminder.py` | `select_reminder_recipients(employees, participants)` | SQL в домене |
+| Голос в транзакции | `vote/service/` | `cast_vote`, `withdraw_vote` | `session.commit()` в роутере |
+| SQL подсчёта | `vote/dao/` | `count_votes_by_idea(session, contest_id)` | |
+| Схема ответа | `idea/controller/schemas.py` | `IdeaForVoting` (нет полей автора), `IdeaWithAuthor` | одна схема с `author=None` |
 | React-хук | `features/voting/` | `useCastVote`, `contestKeys.ideas(id)` | `useData` |
 
 ### 6.4 Глоссарий
@@ -357,6 +391,24 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | финализация | `finalization` | разовая фиксация итога и постановка писем |
 | участник | `participant` | автор текущей идеи или голосующий в конкурсе |
 
+### 6.5 Самопроверка уровня Senior (обязательна для каждого написанного кода)
+
+Требование владельца (2026-10-20 05:31): каждый написанный код до коммита проверяется так, будто его
+ревьюит Senior-разработчик: **безопасность, структура, архитектура, корректность**. Найденное
+исправляется до коммита; то, что осознанно не исправлено, записывается как известное ограничение.
+
+| Ось | Что проверить |
+|---|---|
+| Безопасность | Ввод проверяется на границе (схема) и инварианты — в модели; нет утечки персональных данных и связки автор ↔ идея в логи, `repr`, тексты ошибок и события; права проверяются на сервере, порядок 401 → 404 → 403 → 409; SQL только с параметрами; секретов нет в коде и тестах; новая зависимость проверена (`pip-audit`, лицензия) |
+| Структура | Файл в нужном модуле и слое (§4.4); имена по §6.2 и глоссарию §6.4; нет дублирования и мёртвого кода; комментарии объясняют «почему»; публичное API пакета — через `__init__` и `__all__` |
+| Архитектура | Импорты по §4.2 (внутри модуля и между модулями, без циклов); побочные эффекты только у владельцев §4.3; решения Р1–Р14 не нарушены; нет новой инфраструктуры без записи в §17 |
+| Корректность | Каждое поведение привязано к требованию ТЗ (§1); границы: `d−1µs / d / d+1µs`, пусто / максимум / максимум+1, часовые пояса и naive `datetime`, повтор запроса, гонка двух вкладок; на каждую ветку есть тест; `ruff`, `mypy --strict`, `pytest` зелёные |
+
+Где фиксируется результат:
+1. `docs/code-review/<ГГГГ-ММ-ДД>-<тема>.md` — что проверено по каждой оси, найденные проблемы, как исправлены, что осталось и почему, какие команды запускались и с каким итогом.
+2. Тело коммита — краткий итог самопроверки (найдено / исправлено / осталось) и ссылка на файл.
+3. §17 — строка, если самопроверка изменила решение или правило.
+
 ---
 
 ## 7. База данных
@@ -371,7 +423,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | `ideas` | **uuid** `gen_random_uuid()` | contest_id, author_id, title, description, submitted_at, updated_at, version int, client_request_id uuid, request_hash bytea | FK contests RESTRICT, users RESTRICT; CHECK длины title 1–200, description ≤ 10 000; `UNIQUE(author_id, client_request_id)`; idx(contest_id, submitted_at, id) | `services.ideas` |
 | `votes` | PK `(idea_id, voter_id)` | created_at | FK ideas **ON DELETE CASCADE**, users RESTRICT; idx(voter_id) | `services.votes` |
 | `reminders` | PK `(contest_id, round, user_id)` | created_at | `CHECK round IN ('submission','voting')`; FK contests CASCADE | `services.reminders` |
-| `outbox_emails` | bigint identity | dedup_key, kind, user_id NULL, to_email, subject, body NULL, status, attempts, next_attempt_at, lease_until NULL, not_after NULL, sent_at NULL, last_error NULL, created_at | `UNIQUE(dedup_key)`; `CHECK status IN ('pending','sending','sent','failed','expired')`; частичный idx(next_attempt_at) WHERE status IN ('pending','sending') | сервисы пишут, `jobs.outbox_dispatcher` отправляет |
+| `outbox_emails` | bigint identity | dedup_key, kind, user_id NULL, to_email, subject, body NULL, status, attempts, next_attempt_at, lease_until NULL, not_after NULL, sent_at NULL, last_error NULL, created_at | `UNIQUE(dedup_key)`; `CHECK status IN ('pending','sending','sent','failed','expired')`; частичный idx(next_attempt_at) WHERE status IN ('pending','sending') | `service` модулей пишут, `notification/handler` отправляет |
 
 - Результаты **не хранятся**: считаются `COUNT … GROUP BY` при каждом запросе (нет счётчиков → нет потерянных обновлений). `winner_idea_id` фиксируется при финализации только для писем; результаты API и письма считаются одной функцией `domain.ranking.rank_ideas` (integration-тест сверяет).
 - **Время:** все поля `timestamptz` (микросекунды, UTC); сессия БД `timezone=UTC`. API принимает время только со смещением. Деньги и дробные числа — N/A.
@@ -436,7 +488,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 - Тело запроса — JSON (обязателен `Content-Type: application/json`, только если тело не пустое).
 - `GET /api/contests/{id}` возвращает `phase`, `server_time`, `allowed_actions` (фронт не дублирует правила фаз) и текст правила ничьей.
 - Пагинация: `GET /api/contests?limit≤100&offset`, сортировка `voting_deadline DESC, id DESC`. Список идей конкурса отдаётся целиком (≤ 1000 по лимиту записи).
-- Валидация: NFC, trim, запрет управляющих и невидимых символов (кроме `\n`, `\t` в описании), длины из `domain/limits.py`, `extra="forbid"`, даты только со смещением.
+- Валидация: NFC, trim, запрет управляющих и невидимых символов (кроме `\n`, `\t` в описании), длины из констант `model` модуля (`idea/model/idea.py`, `contest/model/contest.py`), проверка — `common/model/text.py`, `extra="forbid"`, даты только со смещением.
 - `Cache-Control: no-store` для `/api/*`.
 
 ### 8.2 Эндпоинты (план)
@@ -460,7 +512,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | `POST /api/__test__/clock` | только `APP_ENV=e2e` | 204 | 400 (время только вперёд) |
 
 События WS: `ideas_changed`, `idea_deleted`, `phase_changed`, `results_changed`, `session_revoked`.
-Адресаты определяет `domain/policies.py`: в фазе подачи события об идее — только автору и организатору;
+Адресаты определяет `realtime/model/policy.py`: в фазе подачи события об идее — только автору и организатору;
 `idea_deleted` всем — только в фазе голосования; `results_changed` — только организатору.
 
 ### 8.3 Идемпотентность и неизвестный результат
@@ -491,7 +543,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 
 ### 9.2 Проверка прав
 - **Default deny:** каждый маршрут объявляет политику через зависимость; маршрут без политики — ошибка запуска. Явный allow-list публичных маршрутов: `/api/health`, `/api/auth/login`, `/api/auth/register`, статика SPA и fallback на `index.html` (все пути вне `/api`). `POST /api/__test__/clock` имеет политику `e2e_only`. Тест перечисляет `app.routes` и падает на маршруте без политики и вне allow-list.
-- Политики — чистые функции `domain/policies.py`: `can_view_idea`, `can_edit_idea`, `can_delete_idea`, `can_vote`, `can_view_results`, `can_view_authors`, `event_recipients`. В SQL дополнительно `WHERE author_id = :actor_id` для правки и удаления.
+- Политики — чистые функции `<модуль>/model/policy.py`: `can_view_idea`, `can_edit_idea`, `can_delete_idea`, `can_vote`, `can_view_results`, `can_view_authors`, `event_recipients`. В SQL дополнительно `WHERE author_id = :actor_id` для правки и удаления.
 - Чужой невидимый объект → 404. Организатор подаёт/голосует → 403 `organizer_cannot_participate`.
 - Мультиарендность — N/A (одна компания).
 
@@ -528,7 +580,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 
 | Уровень | Что проверяет | Инфраструктура | Правила |
 |---|---|---|---|
-| **Unit** (`tests/unit`, `pytest -m unit`) | `domain/*`: фазы на границах `d−1µs/d/d+1µs`, таблица истинности политик (3 фазы × роль × свой/чужой), ранжирование (Hypothesis: результат не зависит от порядка входа), выбор получателей напоминаний, валидация, лимитер | Без БД и сети; `FrozenClock`, инжектируемая случайность | < 5 с на весь набор |
+| **Unit** (`tests/unit`, `pytest -m unit`) | `app/*/model`: фазы на границах `d−1µs/d/d+1µs`, таблица истинности политик (3 фазы × роль × свой/чужой), ранжирование (Hypothesis: результат не зависит от порядка входа), выбор получателей напоминаний, валидация, лимитер | Без БД и сети; `FrozenClock`, инжектируемая случайность | < 5 с на весь набор |
 | **Integration** (`tests/integration`, `tests/api`, `pytest -m integration`) | SQL, ограничения, транзакции и блокировки, гонки, миграции, сервисы, HTTP через `httpx.AsyncClient(ASGITransport)`, планировщик через `run_tick(now)` | Реальный PostgreSQL: локально БД `ideas_test` в существующем контейнере `db` (127.0.0.1:5433), в CI — service-контейнер. Изоляция savepoint (`join_transaction_mode="create_savepoint"`); тесты с реальным commit — маркер `commits` + TRUNCATE | conftest отказывается работать с БД без суффикса `_test`; планировщик и singleton-lock выключены флагами настроек |
 | **Contract** (`tests/contract`, `make test-contract`) | Снимок OpenAPI (`frontend/openapi.json`, версия = коммит), сгенерированные TS-типы (`tsc`), точные наборы ключей ответов по фазам и ролям, схемы WS-событий с полем `v`, фикстуры MSW проходят по типам из `schema.gen.ts` | Без сети | Источник контракта — OpenAPI из `create_app`; версия — git-коммит |
 | **E2E** (`e2e/`, `make e2e`) | Критические сценарии ТЗ: подача → голосование → финал; две вкладки (П5); открытая страница после дедлайна (П2); удаление идеи исчезает у другого (П11); экран организатора меняется (П7); письма в Mailpit (Ф4) | Единственный `app` в режиме e2e, БД `ideas_e2e`, тестовые часы, Mailpit API | Ожидание по условию (`expect(...).toHaveText`), `waitForTimeout` запрещён |
@@ -681,6 +733,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 9. Документация соответствует реализации: `CLAUDE.md`, `docs/*`, README («Состояние проекта»).
 10. Нет необоснованных новых сервисов и зависимостей; новая зависимость записана в §17.
 11. Отчётность: промпт в `docs/prompts.md`, решения в §17, коммит этапа (§16).
+12. Проведена самопроверка уровня Senior по §6.5 (безопасность, структура, архитектура, корректность); результат — в `docs/code-review/` и в теле коммита; найденное исправлено или записано как известное ограничение.
 
 ---
 
@@ -698,7 +751,8 @@ state-менеджеры, библиотеки дат и форм. Любая н
 2. Каждое решение — строка в §17 с временем UTC, причиной и номером требования.
 3. Конец этапа: обновить статусы §1, «Состояние проекта» и «Следующим заходом» в README, строку в §18, коммит.
 4. Экспорт сессии (`python3 tools/export_agent_session.py`) — после согласия владельца.
-5. Историю git не переписывать (без squash и force-push).
+5. Историю git не переписывать (без squash и force-push). Единственное исключение — по прямой просьбе владельца 05:21 два первых коммита объединены в `2e305d0` до первой отправки на GitHub; после отправки история не переписывается.
+7. Каждый написанный код проходит самопроверку §6.5; её результат — файл в `docs/code-review/`.
 6. Использован генератор или чужой код — сразу запись в §15 и README.
 
 ## 17. Журнал решений
@@ -749,11 +803,23 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | 2026-10-20 05:10 | Prometheus, оповещения — N/A локально | Нет сервера сбора | — |
 | 2026-10-20 05:10 | Неизвестная ревизия схемы → отказ старта с сообщением, без флага обхода | Защита от запуска старого кода на новой схеме | — |
 | 2026-10-20 05:20 | Финальная сверка документов агентом Security & Quality: исправлены 12 расхождений (порядок lock → миграции, allow-list SPA в default deny, фильтр получателей напоминаний, состав `make check`/`make test` и др.) | Проверка на противоречия по требованию владельца | О13 |
+| 2026-10-20 05:23 | Репозиторий GitHub `JustExpo/IdeasCompetition`; два ранних коммита объединены в `2e305d0` по просьбе владельца до первой отправки | Запрос владельца; отправка через `git bundle`, на Mac нет учётных данных GitHub | С1, С4 |
+| 2026-10-20 05:35 | ~~Р2: слои `domain/services/db/api`~~ → backend делится на модули по частям логики (`user, auth, contest, idea, vote, result, reminder, notification, realtime` + `common`), в каждом слои `model/service/exception/controller/dao/handler` (§4.2) | Указание владельца: по пути должно быть видно, к чему относится модель | О13 |
+| 2026-10-20 05:35 | Слой `handler` — реакции не на HTTP-запрос (тики планировщика, события шины) и особые случаи перевода исключений; общий перевод `AppError` → problem+json — один, в `core/http_errors.py` | Название слоя дал владелец без расшифровки; так у слоя одна ясная обязанность и нет дублирования перевода ошибок в 9 модулях | О13 |
+| 2026-10-20 05:35 | Инфраструктура без бизнес-логики (config, clock, logging, db, scheduler) — пакет `app/core/`, модули его используют, он модули — нет | Иначе модули дублировали бы инфраструктуру или зависели друг от друга | О13 |
+| 2026-10-20 05:40 | Доменные модели — `frozen dataclass(slots=True)` без фреймворков; время — аргумент `now`; naive `datetime` отклоняется в конструкторе | Неизменяемость и проверка инвариантов при создании; модели тестируются без БД | П1, П2 |
+| 2026-10-20 05:40 | Исключение несёт `code` и HTTP `status` как атрибуты класса; модели бросают исключения своего модуля | Один общий перевод в problem+json; код ошибки виден рядом с местом, где она возникает | §8 |
+| 2026-10-20 05:40 | Нормализация и проверка текста (NFC, обрезка, запрет управляющих и невидимых символов) — `common/model/text.py`, общая для темы конкурса и идеи | Найдено самопроверкой: тема конкурса не проверялась, а идея проверялась | О12 |
+| 2026-10-20 05:40 | Персональные данные (e-mail, имя, адрес письма, тексты), автор идеи и тексты идей скрыты из `repr` моделей | Найдено самопроверкой: `repr` dataclass попал бы в логи и раскрыл автора в фазе голосования | П3, П4, §13 |
+| 2026-10-20 05:40 | Ранжирование: голоса ↓, `submitted_at` ↑, затем `id` — места уникальны, результат не зависит от порядка входа | П10 и детерминизм итога | Ф4, П10 |
+| 2026-10-20 05:40 | Ruff: отключены `RUF001–RUF003` (кириллица как «двусмысленный» символ) | Тексты, комментарии и тесты на русском — это не ошибка | О13 |
+| 2026-10-20 05:40 | Самопроверка уровня Senior для каждого кода (§6.5), пункт 12 DoD, отчёты в `docs/code-review/` | Требование владельца | О13, С3 |
 
 ## 18. Хронология этапов
 
 | Этап | Начало (UTC) | Конец (UTC) | Коммит | Итог |
 |------|--------------|-------------|--------|------|
 | 0. Изучение ТЗ, подключение папки | 2026-10-20 04:24 | 2026-10-20 04:30 | — | ТЗ разобрано, папка подключена |
-| 1. План и требования к отчёту | 2026-10-20 04:30 | 2026-10-20 04:45 | `docs: план архитектуры и требования к отчёту по ТЗ` | CLAUDE.md, README.md, docs/prompts.md, скрипт экспорта |
-| 2. Архитектура и правила разработки | 2026-10-20 04:55 | 2026-10-20 05:20 | `docs: архитектура и правила разработки (три агента)` | CLAUDE.md, docs/architecture-review.md, docs/edge-cases.md, docs/runbook.md, отчёты агентов |
+| 1. План и требования к отчёту | 2026-10-20 04:30 | 2026-10-20 04:45 | `2e305d0` | CLAUDE.md, README.md, docs/prompts.md, скрипт экспорта |
+| 2. Архитектура и правила разработки | 2026-10-20 04:55 | 2026-10-20 05:20 | `2e305d0` (вместе с этапом 1, объединены по просьбе владельца) | CLAUDE.md, docs/architecture-review.md, docs/edge-cases.md, docs/runbook.md, отчёты агентов |
+| 4а. Структура пакетов и доменные модели | 2026-10-20 05:29 | 2026-10-20 05:45 | `Созданы базовые доменные модели и структура пакетов backend` | `backend/app/*` (9 модулей + common), `backend/tests/unit`, `backend/pyproject.toml`, §4 и §6.5 CLAUDE.md, `docs/code-review/` |

@@ -1,0 +1,1 @@
+"""idea.controller — hTTP- и WebSocket-эндпоинты FastAPI модуля."""

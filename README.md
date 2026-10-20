@@ -6,7 +6,7 @@
 
 ## Репозиторий
 
-Ссылка на GitHub: _будет добавлена после создания репозитория._
+GitHub: https://github.com/JustExpo/IdeasCompetition
 
 ## Чем делали
 
@@ -18,6 +18,7 @@
 ## Промпты, решения и ход работы
 
 - Промпты владельца дословно: [docs/prompts.md](docs/prompts.md).
+- Самопроверка каждого написанного кода (Senior-ревью): [docs/code-review/](docs/code-review/).
 - Журнал решений с временем: [CLAUDE.md, §17](CLAUDE.md).
 - Хронология этапов: [CLAUDE.md, §18](CLAUDE.md) и история коммитов (коммит на каждый этап).
 - Отчёты агентов по раундам ревью: [docs/architecture-review/raw/](docs/architecture-review/raw/).
@@ -42,9 +43,12 @@
 | Архитектура и правила разработки | предложено, ждёт согласования ([CLAUDE.md](CLAUDE.md)) |
 | Матрица пограничных случаев | готово ([docs/edge-cases.md](docs/edge-cases.md)) |
 | Runbook | план ([docs/runbook.md](docs/runbook.md)) |
-| Backend, frontend, Docker, тесты, CI | не начаты |
+| Структура backend и доменные модели | готово: 9 модулей + `common`, 47 unit-тестов ([CLAUDE.md §4](CLAUDE.md)) |
+| Самопроверка кода | [docs/code-review/](docs/code-review/) |
+| Сервисы, БД, API, frontend, Docker, CI | не начаты |
 
-Ни одна команда из документации ещё не запускалась: кода нет. Это обновляется в конце каждого этапа.
+Запускались только проверки backend: `pytest` (47 passed), `ruff`, `mypy --strict` — в облачном контейнере агента на Python 3.13
+(целевая 3.12). Команды `make …` ещё не существуют. Это обновляется в конце каждого этапа.
 
 ## Принятые толкования ТЗ
 

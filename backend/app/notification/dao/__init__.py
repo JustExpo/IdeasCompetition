@@ -1,0 +1,1 @@
+"""notification.dao — доступ к данным: таблицы SQLAlchemy и запросы модуля."""
