@@ -1,5 +1,21 @@
-"""common.exception — базовое исключение приложения."""
+"""common.exception — базовое исключение приложения и ошибки уровня запроса."""
 
-from app.common.exception.errors import AppError, DomainValidationError
+from app.common.exception.errors import (
+    AppError,
+    DomainValidationError,
+    InvalidJsonError,
+    NotAuthenticatedError,
+    OriginNotAllowedError,
+    PayloadTooLargeError,
+    UnsupportedMediaTypeError,
+)
 
-__all__ = ["AppError", "DomainValidationError"]
+__all__ = [
+    "AppError",
+    "DomainValidationError",
+    "InvalidJsonError",
+    "NotAuthenticatedError",
+    "OriginNotAllowedError",
+    "PayloadTooLargeError",
+    "UnsupportedMediaTypeError",
+]

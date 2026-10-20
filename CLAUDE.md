@@ -504,7 +504,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 - `GET /api/contests/{id}` возвращает `phase`, `server_time`, `allowed_actions` (фронт не дублирует правила фаз) и текст правила ничьей.
 - Пагинация: `GET /api/contests?limit≤100&offset`, сортировка `voting_deadline DESC, id DESC`. Список идей конкурса отдаётся целиком (≤ 1000 по лимиту записи).
 - Валидация: NFC, trim, запрет управляющих и невидимых символов (кроме `\n`, `\t` в описании), длины из констант `model` модуля (`idea/model/idea.py`, `contest/model/contest.py`), проверка — `common/model/text.py`, `extra="forbid"`, даты только со смещением.
-- `Cache-Control: no-store` для `/api/*`.
+- `Cache-Control: no-store` для `/api/*` (проверено в IC-004; реализовано `core/middleware.py`, `core/http_errors.py`, `core/access.py`).
 
 ### 8.2 Эндпоинты (план)
 
@@ -863,6 +863,10 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | 2026-10-20 18:50 | IC-003: `app.core` может импортировать `app.common` (ошибки и типы), но не предметные модули; `model`/`exception` не импортируют `app.core` — контракты import-linter (17 штук) | Для `core/http_errors.py` нужен `AppError`; чистые модели не знают про инфраструктуру | О13 |
 | 2026-10-20 18:50 | IC-003: маскирование логов стоит в цепочке structlog до форматтера (и для стандартного `logging`): e-mail → `a***@домен`, поля `password`, `token`, `secret`, `cookie`, `authorization`, `sid`, `body`, `title`, `description` → `[REDACTED]`, текст исключений тоже маскируется | Одна точка защиты от утечки ПДн и текстов идей, `caplog` её видит | П3, П4, §13 |
 | 2026-10-20 18:50 | IC-003: `ruff`: `TID251` отключён только для `app/core/clock.py`; в `tests/**` отключены `S105`/`S106` (фиктивные пароли в тестах) | Одно место чтения времени (Р4); тестовые значения не секреты | О13 |
+| 2026-10-20 19:10 | IC-004: политика маршрута — зависимость `require(Policy.PUBLIC\|AUTHENTICATED\|EMPLOYEE\|ORGANIZER\|E2E_ONLY)`; `create_app` падает с `RoutePolicyError` и списком путей, если у маршрута `/api` (HTTP или WebSocket) нет политики или публичный маршрут не в allow-list `PUBLIC_API_PATHS`; до появления сессий (IC-007) любая политика кроме `PUBLIC` отвечает 401 | Default deny (§9.2): забытая проверка личности закрывает маршрут, а не открывает | П3, П4 |
+| 2026-10-20 19:10 | IC-004: тело ошибки problem+json не содержит присланных значений: для 422 — только путь к полю и тип ошибки pydantic; неверный JSON — 400 `invalid_json`; 500 — `internal_error` без стека и SQL (причина в логе, замаскированная) | Значение поля может быть паролем или текстом идеи; сообщение pydantic иногда цитирует значение | §8.1, §13 |
+| 2026-10-20 19:10 | IC-004: прослойки — чистый ASGI в порядке контекст запроса → `Origin` → тело; лимит 64 КБ считается и по `Content-Length`, и по фактическим байтам (FastAPI превращает сбой чтения тела в 400, поэтому ответ подменяется на 413); `Origin` обязателен для POST/PUT/PATCH/DELETE | `BaseHTTPMiddleware` буферизует тело; `Content-Length` можно не указать или солгать; SameSite=Lax от CSRF не защищает полностью | §8.1, §9.3 |
+| 2026-10-20 19:10 | IC-004: `/docs`, `/redoc`, `/openapi.json` отключены, контракт берётся из `app.openapi()` (экспорт — IC-024/IC-031); временный `/api/health` без БД лежит в `core/health.py` и заменяется в IC-005 | Swagger UI тянет скрипты с CDN, что противоречит CSP; маршрут, объявленный сервером без политики, нарушал бы default deny | §8.1, §9.2 |
 
 ## 18. Хронология этапов
 
@@ -875,4 +879,5 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | План разработки (to-do-list и спецификации) | 2026-10-20 05:47 | 2026-10-20 06:02 | ветка `docs/development-plan`, MR | `Documents/Конкурс идей/` |
 | IC-001. CLAUDE.md в соответствии с модулями | 2026-10-20 17:28 | 2026-10-20 17:40 | ветка `feature/IC-001-claude-md`, MR | CLAUDE.md §1, §4.2, §7, §8.2, §10, §16, §17; `docs/edge-cases.md`, `docs/runbook.md` |
 | IC-002. Зависимости, import-linter, CI | 2026-10-20 17:34 | 2026-10-20 18:15 | ветка `feature/IC-002-ci`, MR | `backend/pyproject.toml`, `uv.lock`, `.python-version`, `.importlinter`, `tests/ruff.toml`, `.github/workflows/ci.yml` |
-| IC-003. Конфигурация, часы, логирование | 2026-10-20 18:44 | 2026-10-20 19:10 | ветка `feature/IC-003-core`, MR | `backend/app/core/{config,clock,logging}.py`, `tests/fakes.py`, `tests/unit/core/`, `.env.example` |
+| IC-003. Конфигурация, часы, логирование | 2026-10-20 18:44 | 2026-10-20 19:10 | ветка `feature/IC-003-core`, MR #5 | `backend/app/core/{config,clock,logging}.py`, `tests/fakes.py`, `tests/unit/core/`, `.env.example` |
+| IC-004. Приложение FastAPI, problem+json, доступ по умолчанию | 2026-10-20 18:55 | 2026-10-20 19:15 | ветка `feature/IC-004-app`, MR | `backend/app/main.py`, `core/{access,http_errors,middleware,health}.py`, `common/exception`, `tests/unit/core/test_app_http.py` |
