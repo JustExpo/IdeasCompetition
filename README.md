@@ -17,6 +17,7 @@ GitHub: https://github.com/JustExpo/IdeasCompetition
 
 ## Промпты, решения и ход работы
 
+- План разработки, задачи и спецификации: [Documents/Конкурс идей/TODO.md](Documents/Конкурс%20идей/TODO.md).
 - Промпты владельца дословно: [docs/prompts.md](docs/prompts.md).
 - Самопроверка каждого написанного кода (Senior-ревью): [docs/code-review/](docs/code-review/).
 - Журнал решений с временем: [CLAUDE.md, §17](CLAUDE.md).
@@ -45,6 +46,7 @@ GitHub: https://github.com/JustExpo/IdeasCompetition
 | Runbook | план ([docs/runbook.md](docs/runbook.md)) |
 | Структура backend и доменные модели | готово: 9 модулей + `common`, 47 unit-тестов ([CLAUDE.md §4](CLAUDE.md)) |
 | Самопроверка кода | [docs/code-review/](docs/code-review/) |
+| План разработки (31 задача) | черновик, ждёт обсуждения ([TODO.md](Documents/Конкурс%20идей/TODO.md)) |
 | Сервисы, БД, API, frontend, Docker, CI | не начаты |
 
 Запускались только проверки backend: `pytest` (47 passed), `ruff`, `mypy --strict` — в облачном контейнере агента на Python 3.13
