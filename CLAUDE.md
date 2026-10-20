@@ -83,8 +83,8 @@
 
 | №  | Требование ТЗ | Как закрываем | Чем доказываем |
 |----|---------------|---------------|----------------|
-| П1 | Раунды закрываются сами по времени | Фаза вычисляется из `Clock` и дедлайнов, флага «закрыт» нет | unit `compute_phase` на границах; int финализации |
-| П2 | Идея и голос после закрытия не принимаются, даже если страница открыта | Проверка фазы на сервере в транзакции после блокировки конкурса; `now` читается после блокировки | int с FakeClock; e2e «форма открыта → время сдвинуто → отправка → 409» |
+| П1 | Раунды закрываются сами по времени | Фаза вычисляется из `Clock` и дедлайнов, флага «закрыт» нет | unit `ContestSchedule.phase_at` на границах; int финализации |
+| П2 | Идея и голос после закрытия не принимаются, даже если страница открыта | Проверка фазы на сервере в транзакции после блокировки конкурса; `now` читается после блокировки | int с FrozenClock; e2e «форма открыта → время сдвинуто → отправка → 409» |
 | П3 | Во время подачи чужие идеи не видны | API отдаёт только свои; события WS о чужих идеях не отправляются | int, contract |
 | П4 | В голосовании все идеи без авторов; за свою нельзя | `IdeaForVoting` без автора и времени; UUID-идентификаторы; 403 `own_idea_vote` | contract (точный набор ключей), int, e2e |
 | П5 | Один голос на идею при любом числе вкладок | PK в БД + `ON CONFLICT DO NOTHING` | int (параллельные запросы), e2e (две вкладки) |
@@ -177,7 +177,7 @@
 | Р1 | Один контейнер `app`: FastAPI отдаёт API и собранный SPA; frontend — отдельный код и сборка | Инвариант «один контейнер приложения» (§12) + О1; один origin убирает CORS и упрощает CSRF | Отдельный nginx-контейнер frontend — нарушает инвариант | Проверяющий может счесть frontend «не отдельным» — README объясняет | Сборка образа; e2e через порт app |
 | Р2 | Модульный монолит; с 05:35 по указанию владельца — модули по частям логики, в каждом слои `controller/handler → service → dao → model → exception` (§4.2); исходный вариант `api/jobs/cli → services → adapters → domain` заменён | Правила ТЗ тестируются без БД и сети; транспорт и хранилище не протекают в правила | Плоская структура; hexagonal с портами на каждый репозиторий | Интерфейсы (Protocol) только для `Clock`, `EmailSender`, `EventPublisher` | `lint-imports` в CI |
 | Р3 | Фаза вычисляется из времени, `now < deadline` — раунд открыт | Закрытию «нечему не сработать» (П1) | Хранимый флаг + планировщик | Точность писем ± тик | unit на границах |
-| Р4 | Время — часы приложения `Clock`, читаются после блокировки и заново при повторе транзакции | Тестируемость; `now()` PostgreSQL — время начала транзакции | `now()`/`clock_timestamp()` БД | Один процесс — одни часы | int с FakeClock; ruff `banned-api` |
+| Р4 | Время — часы приложения `Clock`, читаются после блокировки и заново при повторе транзакции | Тестируемость; `now()` PostgreSQL — время начала транзакции | `now()`/`clock_timestamp()` БД | Один процесс — одни часы | int с FrozenClock; ruff `banned-api` |
 | Р5 | Инварианты в БД: PK голосов, FK + CASCADE, CHECK, уникальные ключи outbox/напоминаний | Код имеет гонки, ограничение БД — нет | Проверки в коде | — | int на каждое ограничение |
 | Р6 | `READ COMMITTED` + блокировки в порядке contest → idea → vote; записи `FOR SHARE` конкурса, финализация `FOR UPDATE` | Голос, принятый до дедлайна, гарантированно попадает в итог; голоса не сериализуются между собой | `SERIALIZABLE` с ретраями | Повтор при дедлоке ≤ 3 раз | int с двумя соединениями |
 | Р7 | `ideas.id` — UUIDv4, остальные PK — bigint | Последовательный id раскрывает порядок подачи и выдаёт автора | bigint везде; HMAC-порядок | — | contract, int |
@@ -187,7 +187,7 @@
 | Р11 | Подтверждение e-mail и сброс пароля по почте — не в объёме; allow-list домена; сброс через CLI | Вся почта уходит в общий Mailpit: подтверждение ничего не доказывает | Подтверждение через Mailpit | Риск лишних аккаунтов (Sybil) — записан | — |
 | Р12 | Один контейнер приложения: `container_name` + session advisory lock в БД + подсчёт по label | Атомарный отказ демона + защита от запуска мимо Docker | Хостовый lock-файл; только `project name` | Ручной `docker run` против другой БД — вне гарантии | `scripts/check_singleton.sh` (§12.4) |
 | Р13 | Дедлайны неизменяемы после создания | Правка ломает «одно напоминание» и открытые вкладки | Правка с `FOR UPDATE` | Ошибку дедлайна чинят новым конкурсом | int (нет эндпоинта) |
-| Р14 | Тесты без отдельного тестового стека: pytest на хосте против БД `ideas_test` в том же `db`; e2e переключает единственный `app` в режим e2e с БД `ideas_e2e` | Отдельный стек = второй контейнер приложения | testcontainers, `-p ideas-e2e` | Во время e2e dev-приложение недоступно | `check_singleton.sh` после e2e |
+| Р14 | Тесты без отдельного тестового стека: pytest на хосте против БД `ideas_test` в том же `db`; e2e переключает единственный `app` в режим e2e с БД `ideas_e2e`. Отклонение (предложено в IC-001): агент без Docker гоняет integration-тесты на локальном PostgreSQL 16 своего контейнера, Docker-часть проверяет CI | Отдельный стек = второй контейнер приложения | testcontainers, `-p ideas-e2e` | Во время e2e dev-приложение недоступно | `check_singleton.sh` после e2e |
 
 ---
 
@@ -263,10 +263,24 @@ IdeasCompetition/
 ```
 common  ←  user  ←  auth
            user, contest  ←  idea  ←  vote  ←  result
-           contest  ←  reminder
+           contest, idea, vote  ←  reminder
            notification, realtime  ← вызываются сервисами других модулей и сами их не импортируют
 core    ←  все модули (только service, dao, controller, handler); core не импортирует модули, кроме main.py
 ```
+
+Уточнения графа (IC-001, 2026-10-20; **предложено, ждёт согласования владельца**):
+- **Список идей конкурса** (`GET /api/contests/{id}/ideas`) во всех фазах отдаёт
+  `vote.service.list_contest_ideas`: идеи берёт у `idea.service`, а в фазе голосования добавляет
+  `my_vote`. Поэтому маршрут живёт в `vote.controller`. Ребра `idea → vote` нет; без этого правила
+  `idea` пришлось бы читать чужие голоса.
+- **Напоминания** (`reminder`) читают участие через `idea.service` и `vote.service`
+  (рёбра `reminder → idea`, `reminder → vote`); выбор получателей — чистая функция в `reminder.model`.
+- **События реального времени:** аудиторию события вычисляет публикующий сервис по политике своего
+  модуля (`idea/model/policy.py`, `vote/model/policy.py`, `result/model/policy.py`) и передаёт в
+  `realtime.service` готовый список адресатов (пользователи и/или роль). `realtime` только рассылает:
+  не знает фаз, авторов и идей, импортирует только `common` и `core`.
+- **Итоговые письма и напоминания** ставят `result.service` и `reminder.service` через
+  `notification.service`; `notification` получает готовые адрес, тему и текст.
 
 Обязательные правила (проверяет `lint-imports`; конфиг `.importlinter` — на этапе каркаса, план контрактов ниже):
 - `layers` для каждого модуля: `controller | handler` > `service` > `dao` > `model` > `exception`.
@@ -306,7 +320,7 @@ Frontend: `pages → features → api | shared`; `features/*` не импорт�
 | Новый эндпоинт | `app/<модуль>/controller/` + схема там же + политика доступа + регенерация контракта |
 | Новое письмо | шаблон в `app/notification/service/templates.py` + `EmailKind` + `dedup_key` вида `<kind>:<contest>:<user>` + постановка из `service` модуля-источника |
 | Новая периодическая задача | функция в `service` модуля, вызов из его `handler`, регистрация в `core/scheduler.py` (не новый процесс и не новый контейнер) |
-| Новое WS-событие | `EventType` в `app/realtime/model/event.py`, правило адресатов в `app/realtime/model/policy.py`, обработчик в `frontend/src/api/events.ts` |
+| Новое WS-событие | `EventType` в `app/realtime/model/event.py`, правило адресатов в `model/policy.py` публикующего модуля (§4.2), обработчик в `frontend/src/api/events.ts` |
 | Новый экран | `frontend/src/pages/` + логика в `features/<фича>/` |
 | Переиспользуемый UI | `shared/ui/` — только со второго использования |
 | Лимит или длина поля | константа в `model` модуля (`TITLE_MAX_LENGTH` в `idea/model/idea.py`) + CHECK в миграции |
@@ -352,7 +366,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 
 | Правило | Как проверяется |
 |---|---|
-| Имя функции = глагол + предмет: `cast_vote`, `compute_phase`, `enqueue_due_reminders` | ревью; запрещены `utils.py`, `helpers.py`, `process_*`, `handle_*` без предмета |
+| Имя функции = глагол + предмет: `cast_vote`, `rank_ideas`, `enqueue_due_reminders` | ревью; запрещены `utils.py`, `helpers.py`, `process_*`, `handle_*` без предмета |
 | Предикаты `is_/can_/has_` возвращают `bool` и не бросают; `ensure_*` бросают доменную ошибку и ничего не возвращают; функции с I/O — `async` | mypy (возвращаемые типы), ревью |
 | Единая терминология (глоссарий §6.4) в коде, API, UI и документах | ревью |
 | Зависимости функции — явные аргументы (`session`, `clock`, `actor`), без глобального состояния | import-linter, ревью |
@@ -418,15 +432,15 @@ state-менеджеры, библиотеки дат и форм. Любая н
 
 | Таблица | Ключ | Основные поля | Ограничения и индексы | Владелец |
 |---|---|---|---|---|
-| `users` | bigint identity | email, name, password_hash, role, is_active, created_at | `UNIQUE(lower(email))`, `CHECK role IN ('employee','organizer')` | `services.auth` |
-| `sessions` | bigint identity | token_hash bytea, user_id, created_at, expires_at, revoked_at NULL | `UNIQUE(token_hash)`; FK users CASCADE; idx(user_id), idx(expires_at) | `services.auth` |
-| `contests` | bigint identity | topic, description, submission_deadline, voting_deadline, created_by, created_at, finalized_at NULL, winner_idea_id NULL | `CHECK submission_deadline < voting_deadline`; `CHECK (winner_idea_id IS NULL OR finalized_at IS NOT NULL)`; частичный idx(voting_deadline) WHERE finalized_at IS NULL | `services.contests`, `services.finalization` |
-| `ideas` | **uuid** `gen_random_uuid()` | contest_id, author_id, title, description, submitted_at, updated_at, version int, client_request_id uuid, request_hash bytea | FK contests RESTRICT, users RESTRICT; CHECK длины title 1–200, description ≤ 10 000; `UNIQUE(author_id, client_request_id)`; idx(contest_id, submitted_at, id) | `services.ideas` |
-| `votes` | PK `(idea_id, voter_id)` | created_at | FK ideas **ON DELETE CASCADE**, users RESTRICT; idx(voter_id) | `services.votes` |
-| `reminders` | PK `(contest_id, round, user_id)` | created_at | `CHECK round IN ('submission','voting')`; FK contests CASCADE | `services.reminders` |
-| `outbox_emails` | bigint identity | dedup_key, kind, user_id NULL, to_email, subject, body NULL, status, attempts, next_attempt_at, lease_until NULL, not_after NULL, sent_at NULL, last_error NULL, created_at | `UNIQUE(dedup_key)`; `CHECK status IN ('pending','sending','sent','failed','expired')`; частичный idx(next_attempt_at) WHERE status IN ('pending','sending') | `service` модулей пишут, `notification/handler` отправляет |
+| `users` | bigint identity | email, name, password_hash, role, is_active, created_at | `UNIQUE(lower(email))`, `CHECK role IN ('employee','organizer')` | `user` |
+| `sessions` | bigint identity | token_hash bytea, user_id, created_at, expires_at, revoked_at NULL | `UNIQUE(token_hash)`; FK users CASCADE; idx(user_id), idx(expires_at) | `auth` |
+| `contests` | bigint identity | topic, description, submission_deadline, voting_deadline, created_by, created_at, finalized_at NULL, winner_idea_id NULL | `CHECK submission_deadline < voting_deadline`; `CHECK (winner_idea_id IS NULL OR finalized_at IS NOT NULL)`; частичный idx(voting_deadline) WHERE finalized_at IS NULL | `contest`; `finalized_at`, `winner_idea_id` — `result` |
+| `ideas` | **uuid** `gen_random_uuid()` | contest_id, author_id, title, description, submitted_at, updated_at, version int, client_request_id uuid, request_hash bytea | FK contests RESTRICT, users RESTRICT; CHECK длины title 1–200, description ≤ 10 000; `UNIQUE(author_id, client_request_id)`; idx(contest_id, submitted_at, id) | `idea` |
+| `votes` | PK `(idea_id, voter_id)` | created_at | FK ideas **ON DELETE CASCADE**, users RESTRICT; idx(voter_id) | `vote` |
+| `reminders` | PK `(contest_id, round, user_id)` | created_at | `CHECK round IN ('submission','voting')`; FK contests CASCADE | `reminder` |
+| `outbox_emails` | bigint identity | dedup_key, kind, user_id NULL, to_email, subject, body NULL, status, attempts, next_attempt_at, lease_until NULL, not_after NULL, sent_at NULL, last_error NULL, created_at | `UNIQUE(dedup_key)`; `CHECK status IN ('pending','sending','sent','failed','expired')`; частичный idx(next_attempt_at) WHERE status IN ('pending','sending') | `notification`: пишут `service` других модулей через `notification.service`, отправляет `notification/handler` |
 
-- Результаты **не хранятся**: считаются `COUNT … GROUP BY` при каждом запросе (нет счётчиков → нет потерянных обновлений). `winner_idea_id` фиксируется при финализации только для писем; результаты API и письма считаются одной функцией `domain.ranking.rank_ideas` (integration-тест сверяет).
+- Результаты **не хранятся**: считаются `COUNT … GROUP BY` при каждом запросе (нет счётчиков → нет потерянных обновлений). `winner_idea_id` фиксируется при финализации только для писем; результаты API и письма считаются одной функцией `rank_ideas` (`result/model/ranking.py`) (integration-тест сверяет).
 - **Время:** все поля `timestamptz` (микросекунды, UTC); сессия БД `timezone=UTC`. API принимает время только со смещением. Деньги и дробные числа — N/A.
 - **NULL-семантика:** `finalized_at IS NULL` — финал не выполнен; `finalized_at` есть, `winner_idea_id IS NULL` — идей не было; `revoked_at` — выход; `not_after` — письмо теряет смысл после момента; `client_request_id IS NULL` — старый клиент без ключа (дубли NULL допустимы осознанно).
 - `submitted_at` ставится один раз при создании; правка меняет только `updated_at` и `version` (П10).
@@ -462,10 +476,10 @@ state-менеджеры, библиотеки дат и форм. Любая н
 
 ### 7.4 Миграции
 
-- Alembic, `transaction_per_migration=True`. Порядок entrypoint: **сначала** взять singleton advisory lock (§12.2), **затем** применить миграции и стартовать сервер — иначе второй экземпляр (`compose run`, локальный uvicorn, другой checkout) успел бы мигрировать общую БД под работающим `app`. `lock_timeout=5s`; вручную — `make migrate` (`exec`, не `run`).
+- Alembic, `transaction_per_migration=True`. Порядок запуска (python-лаунчер `app/launcher.py` вместо shell-entrypoint, предложено в IC-001): **сначала** взять singleton advisory lock (§12.2), **затем** применить миграции и стартовать сервер — иначе второй экземпляр (`compose run`, локальный uvicorn, другой checkout) успел бы мигрировать общую БД под работающим `app`. `lock_timeout=5s`; вручную — `make migrate` (`exec`, не `run`).
 - **Expand/contract:** миграция либо только добавляет (таблица, nullable-колонка или с default, индекс), либо только удаляет то, что не использует **предыдущая** версия приложения. Версия N обязана работать на схеме N+1. Перенос данных — отдельная миграция, батчами, идемпотентно.
 - Откат приложения на версию до expand-миграции безопасен; откат contract-миграции = восстановление из бэкапа.
-- Если приложение видит в `alembic_version` неизвестную ему ревизию (например, после `git checkout` на ранний этап), entrypoint завершается с сообщением «БД на ревизии X, приложению известна Y». Флаг обхода не вводится (локальный объём); для прода — план в runbook.
+- Если приложение видит в `alembic_version` неизвестную ему ревизию (например, после `git checkout` на ранний этап), лаунчер завершается с сообщением «БД на ревизии X, приложению известна Y». Флаг обхода не вводится (локальный объём); для прода — план в runbook.
 - Индексы на больших таблицах — `CREATE INDEX CONCURRENTLY` вне транзакции.
 - CI: пустая БД → `upgrade head` → `alembic check` (модели = схема) → `downgrade -1` → `upgrade head`.
 
@@ -499,7 +513,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | `POST /api/auth/register` | аноним | 201 | 422, 409 `email_taken`, 429 |
 | `POST /api/auth/login` / `POST /api/auth/logout` / `GET /api/auth/me` | аноним / вошедший | 200 / 204 / 200 | 401 `invalid_credentials`, 429 |
 | `GET /api/contests` | вошедший | 200 `{items,total}` | 401 |
-| `POST /api/contests` | организатор | 201 | 403, 422 `deadlines_order`, `deadline_in_past` |
+| `POST /api/contests` | организатор | 201 | 403, 422 `deadlines_order` (`DeadlinesOrderError`), `invalid_contest` (тема или описание), `deadline_in_past` |
 | `GET /api/contests/{id}` | вошедший | 200 | 404 |
 | `GET /api/contests/{id}/ideas` | вошедший | 200: подача — свои; голосование — все без автора и времени + `is_mine`, `my_vote`; финал — с авторами | 404 |
 | `POST /api/contests/{id}/ideas` | сотрудник | 201 (повтор — 200) | §7.2 |
@@ -512,8 +526,11 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | `GET /api/health` | все | 200 `{"status":"ok"}` / 503 | — |
 | `POST /api/__test__/clock` | только `APP_ENV=e2e` | 204 | 400 (время только вперёд) |
 
-События WS: `ideas_changed`, `idea_deleted`, `phase_changed`, `results_changed`, `session_revoked`.
-Адресаты определяет `realtime/model/policy.py`: в фазе подачи события об идее — только автору и организатору;
+События WS: `ideas_changed`, `idea_deleted`, `results_changed`, `session_revoked`. Событие
+`phase_changed` не вводится (IC-001, предложено): фаза меняется по времени, а не по действию, поэтому
+публиковать его некому; клиент сам перечитывает данные в момент дедлайна по `server_time`
+(тип `PHASE_CHANGED` удаляется из `realtime/model/event.py` в IC-024).
+Адресатов вычисляет публикующий сервис по политике своего модуля (§4.2): в фазе подачи события об идее — только автору и организатору;
 `idea_deleted` всем — только в фазе голосования; `results_changed` — только организатору.
 
 ### 8.3 Идемпотентность и неизвестный результат
@@ -594,7 +611,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 ### 10.3 Обязательные правила
 - Каждая функция с бизнес-логикой имеет проверяемое поведение, покрытое тестом, включая границы и ошибки; допустима проверка через публичный интерфейс. Отдельные тесты приватных методов и тривиального делегирования не требуются.
 - **Критические ветви** (обязательны, независимо от процента): каждая строка таблицы истинности политик, каждая граница дедлайна, каждая строка §7.2, каждое «Ожидаемое поведение» П1–П11 (§1).
-- Покрытие веток: `app/domain` и `app/security` ≥ 95 %; общий процент — справочно.
+- Покрытие веток: `app/*/model` и `app/auth` ≥ 95 %; общий процент — справочно.
 - Каждый исправленный дефект → регрессионный тест `test_regression_<краткое_имя>` со ссылкой на запись журнала.
 - Нет `sleep`: ruff `banned-api` на `time.sleep`/`asyncio.sleep` в `tests/`; ESLint на `waitForTimeout`. Конкурентность — `asyncio.Barrier`/`Event`.
 - Независимость от порядка — `pytest-randomly`.
@@ -657,7 +674,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | `make backup` / `make restore-check` / `make restore` | §7.5 | Файл дампа / «восстановление проверено» / восстановленная БД |
 | `make destroy` | удаление volume после ввода имени проекта | Данные удалены (только явно) |
 
-Первый запуск: `make up` → миграции в entrypoint → организатор из env → демо-данные при `SEED_DEMO=true`.
+Первый запуск: `make up` → лаунчер: lock → миграции → организатор из env → демо-данные при `SEED_DEMO=true`.
 
 ### 11.4 Health и завершение
 - `GET /api/health` — readiness: `SELECT 1` ≤ 1 с, singleton-lock удержан, схема совместима → 200, иначе 503. Используется healthcheck Docker (через python, curl в slim-образе нет).
@@ -752,7 +769,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 2. Каждое решение — строка в §17 с временем UTC, причиной и номером требования.
 3. Конец этапа: обновить статусы §1, «Состояние проекта» и «Следующим заходом» в README, строку в §18, коммит.
 4. Экспорт сессии (`python3 tools/export_agent_session.py`) — после согласия владельца.
-5. Историю git не переписывать (без squash и force-push). Единственное исключение — по прямой просьбе владельца 05:21 два первых коммита объединены в `2e305d0` до первой отправки на GitHub; после отправки история не переписывается.
+5. Историю git не переписывать (без squash и force-push). Единственное исключение — по прямой просьбе владельца 05:21 два первых коммита объединены в `2e305d0` до первой отправки на GitHub; после отправки история `main` не переписывается. В каждом MR — ровно один коммит (владелец, 06:14): правки по ревью объединяются с ним, и перезаписывается только ветка этого MR (`git push --force-with-lease`).
 6. Использован генератор или чужой код — сразу запись в §15 и README.
 7. Каждый написанный код проходит самопроверку §6.5; её результат — файл в `docs/code-review/`.
 8. В `main` напрямую не пушится ничего (требование владельца 05:38): каждая задача — своя ветка и MR (pull request) в GitHub; мержит владелец после ревью; зелёный CI обязателен до мержа (06:09).
@@ -828,6 +845,14 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | 2026-10-20 06:11 | Участнику, который только голосовал, — письмо с итогами конкурса (тема и победившая идея) | Ответ владельца | Ф4 |
 | 2026-10-20 06:11 | Объём — рабочий прототип по ТЗ: бэкап и восстановление, команды оператора (`reset-password`, `revoke-sessions`, `status`), очистка данных и демо-данные не делаются (IC-028, IC-029 отменены); `check_singleton.sh` остаётся в IC-030. Пункты §7.5, §11.3 и runbook о бэкапе и CLI — план, не реализуются | Ответ владельца | О12 |
 | 2026-10-20 06:12 | Каждая задача начинается только по явному согласию владельца (§16 п. 9) | Требование владельца | С4 |
+| 2026-10-20 06:14 | Один коммит на MR, перезапись только ветки MR (§16 п. 5) | Требование владельца «Делай squash коммитов в MR» | С4 |
+| 2026-10-20 17:30 | Задачи идут по одной: следующая — после мержа MR предыдущей и слова владельца | Выбор владельца на карточке | С4 |
+| 2026-10-20 17:35 | IC-001: устаревшие пути (`services.*`, `domain.*`, `app/security`, `compute_phase`, `FakeClock`) заменены модульными; тестовые часы везде — `FrozenClock` | После перехода на модули документ противоречил коду | О13 |
+| 2026-10-20 17:35 | IC-001 (предложено): граф §4.2 — `reminder → idea, vote`; список идей всех фаз отдаёт `vote.service` (маршрут в `vote.controller`), обратного ребра `idea → vote` нет; аудиторию события считает публикующий модуль, `realtime` только рассылает | Иначе граф имел бы циклы или `realtime` знал бы про фазы и авторов | П3, П4, П7, П11 |
+| 2026-10-20 17:35 | IC-001 (предложено): порядок дедлайнов — отдельная ошибка `DeadlinesOrderError` (`deadlines_order`), `invalid_contest` остаётся для темы и описания; код меняется в IC-010 | Контракт §8.2 обещал `deadlines_order`, код отдавал `invalid_contest` | Ф1 |
+| 2026-10-20 17:35 | IC-001 (предложено): событие `phase_changed` не вводится; клиент перечитывает данные по `server_time` в момент дедлайна; тип удаляется из кода в IC-024 | Фаза меняется по времени, публиковать событие некому | П1, П8 |
+| 2026-10-20 17:35 | IC-001 (предложено): запуск — python-лаунчер `app/launcher.py` (lock → миграции → uvicorn в одном процессе) вместо shell-entrypoint | Session advisory lock должен жить всё время работы сервера; shell-скрипт его не удержит | §12 |
+| 2026-10-20 17:35 | IC-001 (предложено): отклонение от Р14 — агент гоняет integration-тесты на локальном PostgreSQL 16 своего контейнера (Docker там нет), Docker-часть проверяет CI | Иначе агент не может проверить код до MR | О13 |
 
 ## 18. Хронология этапов
 
@@ -838,3 +863,4 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | 2. Архитектура и правила разработки | 2026-10-20 04:55 | 2026-10-20 05:20 | `2e305d0` (вместе с этапом 1, объединены по просьбе владельца) | CLAUDE.md, docs/architecture-review.md, docs/edge-cases.md, docs/runbook.md, отчёты агентов |
 | 4а. Структура пакетов и доменные модели | 2026-10-20 05:29 | 2026-10-20 05:45 | `Созданы базовые доменные модели и структура пакетов backend` | `backend/app/*` (9 модулей + common), `backend/tests/unit`, `backend/pyproject.toml`, §4 и §6.5 CLAUDE.md, `docs/code-review/` |
 | План разработки (to-do-list и спецификации) | 2026-10-20 05:47 | 2026-10-20 06:02 | ветка `docs/development-plan`, MR | `Documents/Конкурс идей/` |
+| IC-001. CLAUDE.md в соответствии с модулями | 2026-10-20 17:28 | 2026-10-20 17:40 | ветка `feature/IC-001-claude-md`, MR | CLAUDE.md §1, §4.2, §7, §8.2, §10, §16, §17; `docs/edge-cases.md`, `docs/runbook.md` |
