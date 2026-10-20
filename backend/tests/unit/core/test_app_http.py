@@ -9,6 +9,7 @@ import httpx
 import pytest
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from pydantic import BaseModel, ConfigDict
+from starlette.requests import HTTPConnection
 from starlette.routing import Route
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -399,7 +400,8 @@ def test_route_with_other_dependencies_besides_policy_passes(bare_app: FastAPI) 
 
 
 async def test_require_policy_public_lets_request_through() -> None:
-    await RequirePolicy(Policy.PUBLIC)()
+    connection = HTTPConnection({"type": "http", "app": FastAPI(), "headers": []})
+    await RequirePolicy(Policy.PUBLIC)(connection)
 
 
 @pytest.mark.parametrize(

@@ -40,6 +40,19 @@ class NotAuthenticatedError(AppError):
     status = 401
 
 
+class ForbiddenError(AppError):
+    """Роль не позволяет действие (политика маршрута)."""
+
+    code = "forbidden"
+    status = 403
+
+
+class OrganizerCannotParticipateError(ForbiddenError):
+    """Организатор видит результаты заранее, поэтому не подаёт идеи и не голосует."""
+
+    code = "organizer_cannot_participate"
+
+
 class OriginNotAllowedError(AppError):
     """Изменяющий запрос пришёл без `Origin` или с чужим `Origin` (защита от CSRF)."""
 

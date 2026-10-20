@@ -1,13 +1,6 @@
-"""Ошибки аутентификации (кто вы) и авторизации (что вам можно)."""
+"""Ошибки входа. Нет сессии (401) и запрет по роли (403) — общие, в `app.common.exception`."""
 
 from app.common.exception import AppError
-
-
-class AuthenticationRequiredError(AppError):
-    """Нет сессии, она истекла или отозвана."""
-
-    code = "authentication_required"
-    status = 401
 
 
 class InvalidCredentialsError(AppError):
@@ -15,10 +8,3 @@ class InvalidCredentialsError(AppError):
 
     code = "invalid_credentials"
     status = 401
-
-
-class ForbiddenError(AppError):
-    """Роль не позволяет действие."""
-
-    code = "forbidden"
-    status = 403

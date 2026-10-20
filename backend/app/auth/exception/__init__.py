@@ -1,9 +1,5 @@
-"""auth.exception — исключения входа и проверки прав."""
+"""auth.exception — исключения входа."""
 
-from app.auth.exception.errors import (
-    AuthenticationRequiredError,
-    ForbiddenError,
-    InvalidCredentialsError,
-)
+from app.auth.exception.errors import InvalidCredentialsError
 
-__all__ = ["AuthenticationRequiredError", "ForbiddenError", "InvalidCredentialsError"]
+__all__ = ["InvalidCredentialsError"]
