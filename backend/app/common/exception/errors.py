@@ -23,3 +23,38 @@ class DomainValidationError(AppError):
 
     code = "validation_error"
     status = 422
+
+
+class InvalidJsonError(AppError):
+    """Тело запроса не разбирается как JSON."""
+
+    code = "invalid_json"
+    status = 400
+
+
+class NotAuthenticatedError(AppError):
+    """Нет действующей сессии."""
+
+    code = "not_authenticated"
+    status = 401
+
+
+class OriginNotAllowedError(AppError):
+    """Изменяющий запрос пришёл без `Origin` или с чужим `Origin` (защита от CSRF)."""
+
+    code = "origin_not_allowed"
+    status = 403
+
+
+class PayloadTooLargeError(AppError):
+    """Тело запроса больше допустимого."""
+
+    code = "payload_too_large"
+    status = 413
+
+
+class UnsupportedMediaTypeError(AppError):
+    """Непустое тело не в формате JSON."""
+
+    code = "unsupported_media_type"
+    status = 415

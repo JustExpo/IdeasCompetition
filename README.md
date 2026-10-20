@@ -49,7 +49,8 @@ GitHub: https://github.com/JustExpo/IdeasCompetition
 | План разработки (31 задача) | утверждён, срок сдачи 2026-10-24 ([TODO.md](Documents/Конкурс%20идей/TODO.md)) |
 | IC-001 (согласование CLAUDE.md с модулями) | готово, смержено (MR #3) |
 | IC-002 (зависимости, import-linter, CI) | готово, смержено (MR #4) |
-| IC-003 (настройки, часы, логи) | MR на ревью |
+| IC-003 (настройки, часы, логи) | готово, смержено (MR #5) |
+| IC-004 (приложение FastAPI, problem+json, доступ по умолчанию) | MR на ревью |
 | Сервисы, БД, API, frontend, Docker, CI | не начаты |
 
 Запускались только проверки backend: `pytest` (47 passed), `ruff`, `mypy --strict` — в облачном контейнере агента на Python 3.13
