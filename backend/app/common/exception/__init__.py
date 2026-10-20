@@ -7,6 +7,7 @@ from app.common.exception.errors import (
     NotAuthenticatedError,
     OriginNotAllowedError,
     PayloadTooLargeError,
+    ServiceUnavailableError,
     UnsupportedMediaTypeError,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "NotAuthenticatedError",
     "OriginNotAllowedError",
     "PayloadTooLargeError",
+    "ServiceUnavailableError",
     "UnsupportedMediaTypeError",
 ]

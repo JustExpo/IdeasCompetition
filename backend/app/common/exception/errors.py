@@ -12,6 +12,7 @@ class AppError(Exception):
 
     code: ClassVar[str] = "app_error"
     status: ClassVar[int] = 400
+    retry_after: ClassVar[int | None] = None  # секунды для заголовка Retry-After (429, 503)
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
@@ -58,3 +59,11 @@ class UnsupportedMediaTypeError(AppError):
 
     code = "unsupported_media_type"
     status = 415
+
+
+class ServiceUnavailableError(AppError):
+    """База данных недоступна или перегружена; клиент может повторить запрос позже."""
+
+    code = "service_unavailable"
+    status = 503
+    retry_after = 5

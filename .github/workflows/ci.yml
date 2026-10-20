@@ -1,5 +1,5 @@
 # Проверки каждого PR (CLAUDE.md §13, п. 1, 3, 4). Зелёный CI обязателен до мержа.
-# Integration-тесты с PostgreSQL добавляет IC-005, frontend — IC-015, образ и e2e — IC-030.
+# Frontend добавляет IC-015, образ и e2e — IC-030.
 name: CI
 
 on:
@@ -39,6 +39,48 @@ jobs:
         run: uv run lint-imports
       - name: unit-тесты
         run: uv run pytest -m unit --cov --cov-report=term-missing
+
+  integration:
+    name: integration (PostgreSQL 16, миграции)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ideas
+          POSTGRES_PASSWORD: ideas-test-only # gitleaks:allow — тестовая БД на раннере
+          POSTGRES_DB: ideas_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ideas -d ideas_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql+asyncpg://ideas:ideas-test-only@127.0.0.1:5432/ideas_test # gitleaks:allow
+      TEST_DATABASE_URL: postgresql+asyncpg://ideas:ideas-test-only@127.0.0.1:5432/ideas_test # gitleaks:allow
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Установить зависимости по lock-файлу
+        run: uv sync --frozen
+      - name: Миграции вверх на пустой БД
+        run: uv run alembic upgrade head
+      - name: Модели совпадают со схемой (alembic check)
+        run: uv run alembic check
+      - name: Миграции вниз на одну ревизию
+        run: uv run alembic downgrade -1
+      - name: Миграции вверх повторно
+        run: uv run alembic upgrade head
+      - name: integration-тесты
+        run: uv run pytest -m integration
 
   security:
     name: security (pip-audit, gitleaks)
