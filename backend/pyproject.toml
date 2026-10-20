@@ -16,6 +16,7 @@ dependencies = [
     "pydantic-settings>=2.16.1",
     "sqlalchemy[asyncio]>=2.1.5",
     "structlog>=26.1.0",
+    "tzdata>=2026.5",
     "uvicorn[standard]>=0.54.0",
 ]
 
@@ -71,7 +72,8 @@ ban-relative-imports = "parents"
 "time.sleep".msg = "Блокирующий sleep запрещён; ожидание — через Clock или asyncio-примитивы"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]  # assert — основной инструмент pytest
+"tests/**" = ["S101", "S105", "S106"]  # assert — основной инструмент pytest; пароли в тестах — фиктивные
+"app/core/clock.py" = ["TID251"]  # единственное место, где разрешено читать системное время (Р4)
 
 [tool.mypy]
 python_version = "3.12"

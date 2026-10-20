@@ -282,11 +282,11 @@ core    ←  все модули (только service, dao, controller, handler
 - **Итоговые письма и напоминания** ставят `result.service` и `reminder.service` через
   `notification.service`; `notification` получает готовые адрес, тему и текст.
 
-Обязательные правила (проверяет `uv run lint-imports`, конфиг `backend/.importlinter` — 16 контрактов, проверено в IC-002; контракты на `app.core` добавляются вместе с пакетом в IC-003, import-linter не принимает несуществующие модули):
+Обязательные правила (проверяет `uv run lint-imports`, конфиг `backend/.importlinter` — 17 контрактов, проверено в IC-002 и IC-003):
 - `layers` для каждого модуля: `controller | handler` > `service` > `dao` > `model` > `exception`.
 - `forbidden`: `app.*.model` и `app.*.exception` не импортируют `sqlalchemy`, `fastapi`, `starlette`, `pydantic`, `asyncpg`, `app.core`.
 - `forbidden`: `app.<A>.*` не импортирует `app.<B>.dao`, `app.<B>.controller`, `app.<B>.handler` для A ≠ B.
-- `forbidden`: `app.common` не импортирует ни один модуль; `app.core` — ни один модуль.
+- `forbidden`: `app.common` не импортирует ни один модуль; `app.core` — ни один предметный модуль (`app.common` ему разрешён: ошибки `AppError` нужны `core/http_errors.py`).
 - `layers` между модулями: `result | reminder` > `vote` > `idea | auth` > `contest | user`; `app.notification` и `app.realtime` не импортируют предметные модули.
 - `app.core.testing` (тестовые часы для e2e) никем не импортируется, кроме `app.main`, который подключает его только при `APP_ENV=e2e`.
 - Циклических импортов нет; относительные импорты выше пакета запрещены (ruff `TID252`).
@@ -638,7 +638,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 - Порты на хосте: `127.0.0.1:8000` (приложение), `127.0.0.1:8025` (Mailpit), `127.0.0.1:5433` (БД, только для тестов и psql).
 
 ### 11.2 Переменные окружения
-Валидируются pydantic-settings при старте; при ошибке — список всех проблем **без значений секретов**, выход с кодом 2.
+Валидируются pydantic-settings при старте (`app.core.config.load_settings`, проверено unit-тестами IC-003); при ошибке — список всех проблем **без значений секретов**, выход с кодом 2. Пустая переменная считается неверным значением, а не отсутствующей: по умолчанию не подменяется. Пример значений для dev — `.env.example` (в prod его пароль организатора отклоняется).
 
 | Переменная | Обязательна | Правило |
 |---|---|---|
@@ -858,6 +858,11 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | 2026-10-20 18:10 | IC-002: `ruff` banned-api запрещает `datetime.now/utcnow/today`, `date.today`, `time.time`, `time.sleep`; в `tests/` дополнительно `asyncio.sleep` (отдельный `tests/ruff.toml`); исключение для `app/core/clock.py` задаётся в IC-003 | §6.2, §10.3, Р4 | П1, П2 |
 | 2026-10-20 18:10 | IC-002: tests/unit автоматически получают маркер `unit` (хук в `tests/unit/conftest.py`); `isort known-first-party = [app, tests]` | Единая сортировка импортов из `backend/` и `tests/ruff.toml`; `pytest -m unit` не требует ручных меток | О13 |
 | 2026-10-20 18:10 | IC-002: CI — два job (`backend`, `security`), actions по мажорным тегам (`checkout@v4`, `setup-uv@v6`, `gitleaks-action@v2`), права `contents: read` | Зелёный CI обязателен до мержа (06:09); минимум прав | О13 |
+| 2026-10-20 18:50 | IC-003: зависимость `tzdata` (Apache-2.0, только данные часовых поясов) | `DISPLAY_TZ` проверяется через `zoneinfo`; в slim-образах и на Windows базы поясов может не быть, без неё валидный пояс отклонялся бы | О12, Ф4 |
+| 2026-10-20 18:50 | IC-003: все ошибки настроек печатаются списком `ИМЯ: причина` без значений и завершают процесс кодом 2; пустая переменная — ошибка, а не «нет значения»; пароль-заглушка из `.env.example` — константа `EXAMPLE_ORGANIZER_PASSWORD`, тест сверяет её с файлом | §11.2; значения секретов не попадают в лог запуска (§9.4) | О12 |
+| 2026-10-20 18:50 | IC-003: `app.core` может импортировать `app.common` (ошибки и типы), но не предметные модули; `model`/`exception` не импортируют `app.core` — контракты import-linter (17 штук) | Для `core/http_errors.py` нужен `AppError`; чистые модели не знают про инфраструктуру | О13 |
+| 2026-10-20 18:50 | IC-003: маскирование логов стоит в цепочке structlog до форматтера (и для стандартного `logging`): e-mail → `a***@домен`, поля `password`, `token`, `secret`, `cookie`, `authorization`, `sid`, `body`, `title`, `description` → `[REDACTED]`, текст исключений тоже маскируется | Одна точка защиты от утечки ПДн и текстов идей, `caplog` её видит | П3, П4, §13 |
+| 2026-10-20 18:50 | IC-003: `ruff`: `TID251` отключён только для `app/core/clock.py`; в `tests/**` отключены `S105`/`S106` (фиктивные пароли в тестах) | Одно место чтения времени (Р4); тестовые значения не секреты | О13 |
 
 ## 18. Хронология этапов
 
@@ -870,3 +875,4 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | План разработки (to-do-list и спецификации) | 2026-10-20 05:47 | 2026-10-20 06:02 | ветка `docs/development-plan`, MR | `Documents/Конкурс идей/` |
 | IC-001. CLAUDE.md в соответствии с модулями | 2026-10-20 17:28 | 2026-10-20 17:40 | ветка `feature/IC-001-claude-md`, MR | CLAUDE.md §1, §4.2, §7, §8.2, §10, §16, §17; `docs/edge-cases.md`, `docs/runbook.md` |
 | IC-002. Зависимости, import-linter, CI | 2026-10-20 17:34 | 2026-10-20 18:15 | ветка `feature/IC-002-ci`, MR | `backend/pyproject.toml`, `uv.lock`, `.python-version`, `.importlinter`, `tests/ruff.toml`, `.github/workflows/ci.yml` |
+| IC-003. Конфигурация, часы, логирование | 2026-10-20 18:44 | 2026-10-20 19:10 | ветка `feature/IC-003-core`, MR | `backend/app/core/{config,clock,logging}.py`, `tests/fakes.py`, `tests/unit/core/`, `.env.example` |

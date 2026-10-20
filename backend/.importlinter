@@ -1,6 +1,5 @@
 # Границы модулей backend — CLAUDE.md §4.2. Запуск: `uv run lint-imports`.
-# Контракты на app.core добавляются вместе с пакетом app.core (IC-003): import-linter не принимает
-# несуществующие модули. Между модулями (A != B) запрещены только dao/controller/handler чужого
+# Между модулями (A != B) запрещены только dao/controller/handler чужого
 # модуля; service/model/exception чужого модуля импортировать можно — по графу ниже.
 [importlinter]
 root_packages =
@@ -86,6 +85,7 @@ forbidden_modules =
     starlette
     pydantic
     asyncpg
+    app.core
 
 [importlinter:contract:service-has-no-http]
 name = service и dao не знают про HTTP
@@ -384,3 +384,19 @@ forbidden_modules =
     app.notification.dao
     app.notification.controller
     app.notification.handler
+
+[importlinter:contract:core-is-infrastructure]
+name = app.core не импортирует предметные модули (только app.common разрешён)
+type = forbidden
+source_modules =
+    app.core
+forbidden_modules =
+    app.user
+    app.auth
+    app.contest
+    app.idea
+    app.vote
+    app.result
+    app.reminder
+    app.notification
+    app.realtime
