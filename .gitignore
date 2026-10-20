@@ -16,3 +16,11 @@ dist/
 docs/agent-session/
 # macOS
 .DS_Store
+
+# Артефакты проверок backend
+.coverage
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.venv/

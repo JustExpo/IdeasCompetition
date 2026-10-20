@@ -1,0 +1,12 @@
+# Тесты: правила backend/pyproject.toml плюс запрет asyncio.sleep — конкурентность в тестах
+# синхронизируется через asyncio.Barrier/Event, а не ожиданием (CLAUDE.md §10.3).
+extend = "../pyproject.toml"
+
+[lint.flake8-tidy-imports.banned-api]
+"datetime.datetime.now".msg = "В тестах время — только через FrozenClock"
+"datetime.datetime.utcnow".msg = "В тестах время — только через FrozenClock"
+"datetime.datetime.today".msg = "В тестах время — только через FrozenClock"
+"datetime.date.today".msg = "В тестах время — только через FrozenClock"
+"time.time".msg = "В тестах время — только через FrozenClock"
+"time.sleep".msg = "sleep в тестах запрещён: используйте asyncio.Barrier/Event"
+"asyncio.sleep".msg = "sleep в тестах запрещён: используйте asyncio.Barrier/Event"
