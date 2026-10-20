@@ -16,10 +16,16 @@ from app.core.middleware import (
     OriginGuardMiddleware,
     RequestContextMiddleware,
 )
+from app.core.singleton import SingletonLock
 
 
-def create_app(settings: Settings, database: Database | None = None) -> FastAPI:
-    """`database` подменяется в тестах; по умолчанию создаётся из настроек (без подключения)."""
+def create_app(
+    settings: Settings,
+    database: Database | None = None,
+    singleton: SingletonLock | None = None,
+) -> FastAPI:
+    """`database` подменяется в тестах; по умолчанию создаётся из настроек (без подключения).
+    `singleton` передаёт лаунчер: `/api/health` отвечает 503, если блокировка потеряна."""
     database = database or Database(settings.database_url.get_secret_value())
 
     @asynccontextmanager
@@ -37,6 +43,8 @@ def create_app(settings: Settings, database: Database | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.database = database
+    app.state.singleton = singleton
+    app.state.draining = False
 
     install_error_handlers(app)
     app.include_router(health_router)

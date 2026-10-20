@@ -80,6 +80,11 @@ python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 
+[[tool.mypy.overrides]]
+# asyncpg не поставляет типы; используется только в core/singleton.py
+module = "asyncpg"
+ignore_missing_imports = true
+
 [tool.coverage.run]
 branch = true
 source = ["app"]
