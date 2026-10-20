@@ -82,6 +82,37 @@ jobs:
       - name: integration-тесты
         run: uv run pytest -m integration
 
+  docker:
+    name: docker (образ, compose, один контейнер)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: make up
+        run: make up
+      - name: /api/health = 200
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/health)
+          test "$code" = 200
+      - name: Повторный make up не пересоздаёт контейнер
+        run: |
+          first=$(docker inspect -f '{{.Id}}' ideas-competition-app)
+          docker inspect -f 'до: image={{.Image}} hash={{index .Config.Labels "com.docker.compose.config-hash"}}' ideas-competition-app
+          make up
+          second=$(docker inspect -f '{{.Id}}' ideas-competition-app)
+          docker inspect -f 'после: image={{.Image}} hash={{index .Config.Labels "com.docker.compose.config-hash"}}' ideas-competition-app
+          test "$first" = "$second"
+      - name: Контейнеров приложения ровно один
+        run: test "$(docker ps -q --filter label=org.ideas-competition.role=app | wc -l)" = 1
+      - name: Лог приложения при падении
+        if: failure()
+        run: docker compose logs --no-color
+      - name: make down сохраняет volume
+        if: always()
+        run: |
+          make down
+          docker volume inspect ideas-competition_pgdata > /dev/null
+
   security:
     name: security (pip-audit, gitleaks)
     runs-on: ubuntu-24.04

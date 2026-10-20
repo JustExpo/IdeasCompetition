@@ -1,0 +1,17 @@
+.git
+.github
+.idea
+.env
+.venv
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.coverage
+backend/tests
+docs
+Documents
+tools
+backups
+node_modules

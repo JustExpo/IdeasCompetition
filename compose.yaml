@@ -1,0 +1,82 @@
+# Единственный контейнер приложения — `app` (CLAUDE.md §12). db и mailpit — инфраструктура.
+# Запуск — `make up`; `docker compose run` для задач запрещён (используйте `exec`).
+name: ideas-competition
+
+services:
+  app:
+    build: .
+    # Фиксированное имя: демон атомарно откажет второму контейнеру с тем же именем.
+    container_name: ideas-competition-app
+    labels:
+      org.ideas-competition.role: app
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 20s
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    healthcheck:
+      # В slim-образе нет curl; ответ 503 даёт исключение urllib и ненулевой код.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  db:
+    image: postgres:16
+    labels:
+      org.ideas-competition.role: db
+    environment:
+      POSTGRES_USER: ideas
+      # Должен совпадать с паролем в DATABASE_URL файла .env.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ideas-dev-password}
+      POSTGRES_DB: ideas
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432" # только для тестов и psql
+    restart: unless-stopped
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ideas -d ideas"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    labels:
+      org.ideas-competition.role: mail
+    ports:
+      - "127.0.0.1:8025:8025" # веб-интерфейс; SMTP (1025) доступен только внутри сети compose
+    restart: unless-stopped
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  pgdata:

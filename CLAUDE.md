@@ -476,7 +476,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 
 ### 7.4 Миграции
 
-- Alembic, `transaction_per_migration=True`. Порядок запуска (python-лаунчер `app/launcher.py` вместо shell-entrypoint, предложено в IC-001): **сначала** взять singleton advisory lock (§12.2), **затем** применить миграции и стартовать сервер — иначе второй экземпляр (`compose run`, локальный uvicorn, другой checkout) успел бы мигрировать общую БД под работающим `app`. `lock_timeout=5s`; вручную — `make migrate` (`exec`, не `run`).
+- Alembic, `transaction_per_migration=True`. Порядок запуска (python-лаунчер `app/core/launcher.py` (+ `core/singleton.py`) вместо shell-entrypoint; реализовано в IC-006): **сначала** взять singleton advisory lock (§12.2), **затем** применить миграции и стартовать сервер — иначе второй экземпляр (`compose run`, локальный uvicorn, другой checkout) успел бы мигрировать общую БД под работающим `app`. `lock_timeout=5s`; вручную — `make migrate` (`exec`, не `run`).
 - **Expand/contract:** миграция либо только добавляет (таблица, nullable-колонка или с default, индекс), либо только удаляет то, что не использует **предыдущая** версия приложения. Версия N обязана работать на схеме N+1. Перенос данных — отдельная миграция, батчами, идемпотентно.
 - Откат приложения на версию до expand-миграции безопасен; откат contract-миграции = восстановление из бэкапа.
 - Если приложение видит в `alembic_version` неизвестную ему ревизию (например, после `git checkout` на ранний этап), лаунчер завершается с сообщением «БД на ревизии X, приложению известна Y». Флаг обхода не вводится (локальный объём); для прода — план в runbook.
@@ -659,7 +659,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 
 Различия сред: **dev** — демо-данные, `:5173` в `ALLOWED_ORIGINS`, cookie без `Secure`; **test** (pytest) — БД `*_test`, без планировщика и lock; **e2e** — БД `ideas_e2e`, тестовые часы, без per-IP лимита, плашка «E2E MODE» в UI; **prod** (план) — https, `__Host-` cookie, HSTS, строгие пароли, без демо и тестовых маршрутов.
 
-### 11.3 Команды жизненного цикла (план; ни одна не запускалась)
+### 11.3 Команды жизненного цикла (`up`, `down`, `restart`, `logs`, `migrate`, `psql`, `test-unit`, `test-int`, `check` реализованы в IC-006, проверены CI; остальные — план)
 
 | Команда | Назначение | Ожидаемый результат |
 |---|---|---|
@@ -669,7 +669,7 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | `make logs` | `docker compose logs -f --tail=200 app` | Поток JSON-логов |
 | `make status` | контейнеры по label, режим, `app.cli status` (outbox, лаг планировщика, ближайший дедлайн) | Таблица состояния |
 | `make migrate` | `docker compose exec app alembic upgrade head` | Схема на head |
-| `make cli ARGS=…` | `docker compose exec app python -m app.cli …` | Результат команды CLI |
+| `make cli ARGS=…` | `docker compose exec app python -m app.cli …` | Результат команды CLI (модуль `app.cli` появится в IC-007) |
 | `make psql` | `docker compose exec db psql …` | Консоль БД |
 | `make backup` / `make restore-check` / `make restore` | §7.5 | Файл дампа / «восстановление проверено» / восстановленная БД |
 | `make destroy` | удаление volume после ввода имени проекта | Данные удалены (только явно) |
@@ -872,6 +872,12 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | 2026-10-20 19:35 | IC-005: `/api/health` = 200 только если БД отвечает ≤ 1 с и ревизия схемы равна «голове» миграций приложения; обе ревизии пишутся в лог, наружу — только 503 без деталей. Лаунчер (IC-006) использует `Database.ensure_schema_is_current` и `wait_until_available` (60 с) | Неизвестная и отстающая ревизии одинаково опасны; health не должен раскрывать устройство БД | §7.4, §9.3 |
 | 2026-10-20 19:35 | IC-005: Alembic — `backend/alembic.ini`, `migrations/env.py` читает `DATABASE_URL` из окружения (без остальных настроек), одна транзакция на миграцию, `lock_timeout=5s`, модели берутся из `app/<модуль>/dao` по мере их появления; базовая ревизия `0001` пуста; `Base` и соглашение об именах ограничений — в `core/db.py` | Миграции запускаются в CI и контейнере без полного набора настроек; имена ограничений нужны dao для перевода `IntegrityError` | §7.4, Р5 |
 | 2026-10-20 19:35 | IC-005: integration-тесты — `TEST_DATABASE_URL` (по умолчанию `127.0.0.1:5433/ideas_test`), отказ при имени БД без суффикса `_test`, в начале прогона схема пересоздаётся и мигрируется до `head`; обычные тесты — транзакция с откатом (savepoint), тесты с реальным commit — маркер `commits` и TRUNCATE; в CI отдельный job с `postgres:16` и циклом `upgrade → check → downgrade -1 → upgrade` | Тесты стирают схему целиком: защита от запуска на рабочей БД; повтор транзакции в savepoint даёт ложнозелёный результат | §10.1, О13 |
+| 2026-10-20 23:35 | IC-006: лаунчер — `app/core/launcher.py`, блокировка — `app/core/singleton.py` (пути в CLAUDE.md §4.1/§7.4 уточнены, прежнее `app/launcher.py` — предложение IC-001); порядок: ожидание БД ≤ 60 с → блокировка (повторы ≤ 30 с, при отказе в сообщении pid, адрес и время старта держателя из `pg_stat_activity`, без текстов запросов) → `alembic upgrade head` в потоке → проверка ревизии → uvicorn; код выхода 1 при отказе | Shell-скрипт не удержит session lock; сообщение оператору должно говорить, кого остановить | §12 |
+| 2026-10-20 23:35 | IC-006: монитор блокировки раз в 10 с — потеря соединения → попытка взять заново (короткий обрыв БД), занята другим → сервер останавливается с кодом 1; `/api/health` = 503 при потере блокировки и во время остановки (флаг `draining` ставится в обработчике SIGTERM до остановки uvicorn) | Два сервера на одной БД недопустимы; балансировщик/healthcheck должны перестать слать запросы до закрытия | §11.4, §12 |
+| 2026-10-20 23:35 | IC-006: `DrainingServer.capture_signals` не пересылает пойманный сигнал себе после остановки (штатный uvicorn ≥ 0.29 это делает, и процесс умирал по SIGTERM, минуя `finally` с освобождением блокировки и `dispose`) | Корректное завершение по §11.4 | §11.4 |
+| 2026-10-20 23:35 | IC-006: Dockerfile — `python:3.12-slim`, `uv==0.11.32` через pip, зависимости по `uv.lock` без dev, непривилегированный пользователь 10001; стадия node не добавлена (IC-015). compose: `container_name`, label, порты на 127.0.0.1 (`8000`, `8025`, БД `5433`), `init`, `stop_grace_period 20s`, лимиты, healthcheck через python; Mailpit `axllent/mailpit:v1.21`; пароль БД — `POSTGRES_PASSWORD` в `.env` (должен совпадать с `DATABASE_URL`) | §11–§12 | О8, О9, О10 |
+| 2026-10-20 23:35 | IC-006: `scripts/up.sh` — проверка Docker и порта 8000, `.env` из примера, preflight по label (чужие контейнеры не удаляются), `up -d --build --wait`, постпроверка «ровно один»; предупреждение о ближайшем дедлайне (<1 ч) не делается до появления таблицы конкурсов; `make status`, `backup`, `restore*`, `destroy`, `e2e` не создаются (отменены или в IC-030); `make cli` ждёт `app.cli` из IC-007 | Объём прототипа (06:11) | §12 |
+| 2026-10-20 23:35 | IC-006: зависимостей не добавлено; `asyncpg` напрямую используется в `core/singleton.py` (уже в стеке), для mypy задан override `ignore_missing_imports` (у пакета нет типов); в CI добавлен job `docker` (make up → health 200 → повторный `make up` с тем же ID → ровно один контейнер → `make down` сохраняет volume) | У агента нет демона Docker; проверка — в CI и у владельца | О13 |
 
 ## 18. Хронология этапов
 
@@ -886,4 +892,5 @@ state-менеджеры, библиотеки дат и форм. Любая н
 | IC-002. Зависимости, import-linter, CI | 2026-10-20 17:34 | 2026-10-20 18:15 | ветка `feature/IC-002-ci`, MR | `backend/pyproject.toml`, `uv.lock`, `.python-version`, `.importlinter`, `tests/ruff.toml`, `.github/workflows/ci.yml` |
 | IC-003. Конфигурация, часы, логирование | 2026-10-20 18:44 | 2026-10-20 19:10 | ветка `feature/IC-003-core`, MR #5 | `backend/app/core/{config,clock,logging}.py`, `tests/fakes.py`, `tests/unit/core/`, `.env.example` |
 | IC-004. Приложение FastAPI, problem+json, доступ по умолчанию | 2026-10-20 18:55 | 2026-10-20 19:15 | ветка `feature/IC-004-app`, MR #6 | `backend/app/main.py`, `core/{access,http_errors,middleware,health}.py`, `common/exception`, `tests/unit/core/test_app_http.py` |
-| IC-005. PostgreSQL, транзакции, миграции Alembic | 2026-10-20 19:02 | 2026-10-20 19:40 | ветка `feature/IC-005-db`, MR | `backend/app/core/db.py`, `alembic.ini`, `migrations/`, `tests/integration/`, job `integration` в CI |
+| IC-005. PostgreSQL, транзакции, миграции Alembic | 2026-10-20 19:02 | 2026-10-20 19:40 | ветка `feature/IC-005-db`, MR #7 | `backend/app/core/db.py`, `alembic.ini`, `migrations/`, `tests/integration/`, job `integration` в CI |
+| IC-006. Docker Compose, Makefile, лаунчер | 2026-10-20 23:19 | 2026-10-20 23:45 | ветка `feature/IC-006-docker`, MR | `Dockerfile`, `compose.yaml`, `Makefile`, `scripts/up.sh`, `backend/app/core/{launcher,singleton}.py`, job `docker` в CI |
