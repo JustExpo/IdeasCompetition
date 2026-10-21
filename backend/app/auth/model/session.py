@@ -1,10 +1,9 @@
-"""Серверная сессия и действующее лицо запроса."""
+"""Серверная сессия."""
 
 from dataclasses import dataclass
 from datetime import datetime
 
 from app.common.model import UserId, require_aware
-from app.user.model import UserRole
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,15 +25,3 @@ class Session:
     def is_valid_at(self, now: datetime) -> bool:
         """Сессия действует, пока не отозвана и не истекла (граница expires_at уже не действует)."""
         return self.revoked_at is None and now < self.expires_at
-
-
-@dataclass(frozen=True, slots=True)
-class Actor:
-    """Кто выполняет запрос. Роль читается из БД на каждый запрос и не кэшируется."""
-
-    user_id: UserId
-    role: UserRole
-
-    @property
-    def is_organizer(self) -> bool:
-        return self.role is UserRole.ORGANIZER

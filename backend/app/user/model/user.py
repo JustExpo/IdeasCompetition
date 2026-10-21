@@ -2,16 +2,8 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import StrEnum
 
-from app.common.model import UserId, require_aware
-
-
-class UserRole(StrEnum):
-    """Роль определяет, что пользователь может делать в конкурсе."""
-
-    EMPLOYEE = "employee"  # подаёт идеи и голосует
-    ORGANIZER = "organizer"  # создаёт конкурсы и видит экран организатора, сам не участвует
+from app.common.model import UserId, UserRole, require_aware
 
 
 @dataclass(frozen=True, slots=True)
