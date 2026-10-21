@@ -14,6 +14,15 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=1024, repr=False)
 
 
+class RegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Верхние пределы — защита от гигантских значений; правила проверяет user.model.
+    email: str = Field(min_length=1, max_length=254)
+    name: str = Field(min_length=1, max_length=400)
+    password: str = Field(min_length=1, max_length=1024, repr=False)
+
+
 class UserResponse(BaseModel):
     """Профиль вошедшего: своя учётная запись, поэтому e-mail показывается."""
 

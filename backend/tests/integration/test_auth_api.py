@@ -570,3 +570,214 @@ async def test_cli_create_organizer_is_idempotent(
     second = await cli.create_organizer()
     assert (first, second) == ("организатор создан", "организатор уже существует")
     assert await count_users(database) == 1
+
+
+REGISTER = {"email": "new.user@example.com", "name": "Новый Сотрудник", "password": PASSWORD}
+
+
+async def register(client: httpx.AsyncClient, **overrides: object) -> httpx.Response:
+    response = await client.post("/api/auth/register", json={**REGISTER, **overrides})
+    client.cookies.clear()
+    return response
+
+
+async def test_register_creates_employee_and_logs_in(
+    client: httpx.AsyncClient, database: Database
+) -> None:
+    response = await register(client)
+    assert response.status_code == 201
+    body = response.json()
+    assert body["email"] == "new.user@example.com"
+    assert body["name"] == "Новый Сотрудник"
+    assert body["role"] == "employee"
+    header = response.headers["set-cookie"]
+    assert "HttpOnly" in header
+    assert "SameSite=lax" in header
+    token = cookie_of(response)
+    assert (await get_with(client, "/api/auth/me", token)).json()["id"] == body["id"]
+    assert (await log_in(client, REGISTER["email"], PASSWORD)).status_code == 200
+
+    async def stored(session: AsyncSession) -> tuple[str, bool]:
+        row = (await session.execute(text("SELECT password_hash, is_active FROM users"))).one()
+        return str(row[0]), bool(row[1])
+
+    password_hash, active = await database.run_in_transaction(stored)
+    assert password_hash.startswith("$argon2id$")
+    assert PASSWORD not in password_hash
+    assert active
+
+
+async def test_register_is_case_insensitive_for_duplicates(client: httpx.AsyncClient) -> None:
+    assert (await register(client, email="Anna@Example.COM")).json()["email"] == "anna@example.com"
+    duplicate = await register(client, email="ANNA@example.com")
+    assert duplicate.status_code == 409
+    assert duplicate.json()["code"] == "email_taken"
+    assert "set-cookie" not in duplicate.headers
+
+
+async def test_register_cannot_take_organizer_address(
+    client: httpx.AsyncClient, database: Database, passwords: PasswordService
+) -> None:
+    await create_user(database, passwords, email="boss@example.com", role=UserRole.ORGANIZER)
+    response = await register(client, email="boss@example.com")
+    assert response.status_code == 409
+    assert (await log_in(client, "boss@example.com", "other-password-1")).status_code == 401
+
+
+@pytest.mark.parametrize(
+    "email", ["a@other.com", "a@sub.example.com", "a@example.com.evil.io", "a@xexample.com"]
+)
+async def test_register_rejects_foreign_domains(client: httpx.AsyncClient, email: str) -> None:
+    response = await register(client, email=email)
+    assert response.status_code == 422
+    assert response.json()["code"] == "email_domain_not_allowed"
+
+
+async def test_register_accepts_second_allowed_domain_in_any_case(
+    client: httpx.AsyncClient,
+) -> None:
+    assert (await register(client, email="a@CORP.example.org")).status_code == 201
+
+
+@pytest.mark.parametrize(
+    "email", ["plain", "a@", "@example.com", "a b@example.com", "a@@example.com"]
+)
+async def test_register_rejects_malformed_email(client: httpx.AsyncClient, email: str) -> None:
+    response = await register(client, email=email)
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_email"
+
+
+@pytest.mark.parametrize("name", ["   ", "x" * 101, "Иван‮Петров", "Ив\x00ан"])
+async def test_register_rejects_bad_names(client: httpx.AsyncClient, name: str) -> None:
+    response = await register(client, name=name)
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_name"
+
+
+async def test_register_name_is_trimmed_and_max_length_accepted(client: httpx.AsyncClient) -> None:
+    assert (await register(client, name="  Анна  ")).json()["name"] == "Анна"
+    ok = await register(client, email="b@example.com", name="я" * 100)
+    assert ok.status_code == 201
+
+
+@pytest.mark.parametrize(("length", "ok"), [(9, False), (10, True), (128, True), (129, False)])
+async def test_register_password_length_boundaries(
+    client: httpx.AsyncClient, length: int, ok: bool
+) -> None:
+    response = await register(client, password="p" * length)
+    assert response.status_code == (201 if ok else 422)
+    if not ok:
+        assert response.json()["code"] == "invalid_password"
+        assert "p" * length not in response.text
+
+
+async def test_register_rejects_unknown_and_missing_fields(client: httpx.AsyncClient) -> None:
+    extra = await register(client, role="organizer")
+    assert extra.status_code == 422
+    assert extra.json()["code"] == "validation_error"
+    missing = await client.post("/api/auth/register", json={"email": "a@example.com"})
+    assert missing.status_code == 422
+
+
+async def test_registered_user_is_never_organizer_even_if_asked(
+    client: httpx.AsyncClient, database: Database
+) -> None:
+    assert (await register(client, role="organizer")).status_code == 422
+
+    async def count(session: AsyncSession) -> int:
+        return int(await session.scalar(text("SELECT count(*) FROM users")) or 0)
+
+    assert await database.run_in_transaction(count) == 0
+
+
+async def test_parallel_registrations_of_one_address_create_one_account(
+    client: httpx.AsyncClient, database: Database
+) -> None:
+    responses = await asyncio.gather(*(register(client) for _ in range(2)))
+    assert sorted(r.status_code for r in responses) == [201, 409]
+    assert await count_users(database) == 1
+
+
+@pytest.mark.parametrize("domain", ["ПРИМЕР.рф", "xn--e1afmkfd.xn--p1ai"])
+async def test_register_handles_idn_domains(
+    monkeypatch: pytest.MonkeyPatch,
+    database: Database,
+    clock: FrozenClock,
+    passwords: PasswordService,
+    domain: str,
+) -> None:
+    apply_env(monkeypatch, base_env(ALLOWED_EMAIL_DOMAINS="пример.рф"))
+    app = create_app(Settings(), database, clock=clock, passwords=passwords)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport, base_url=ORIGIN, headers={"Origin": ORIGIN}
+    ) as client:
+        response = await register(client, email=f"ivan@{domain}")
+        assert response.status_code == 201
+        assert (await register(client, email="ivan@пример.рф")).status_code == 409
+
+
+def client_from(app: FastAPI, ip: str) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app, client=(ip, 5000)),
+        base_url=ORIGIN,
+        headers={"Origin": ORIGIN},
+    )
+
+
+async def test_sixth_failed_login_is_rate_limited(
+    app: FastAPI, database: Database, passwords: PasswordService
+) -> None:
+    await create_user(database, passwords)
+    async with client_from(app, "10.0.0.1") as client:
+        for _ in range(5):
+            assert (await log_in(client, password="wrong-password-1")).status_code == 401
+        blocked = await log_in(client, password="wrong-password-1")
+        assert blocked.status_code == 429
+        assert blocked.json()["code"] == "too_many_attempts"
+        assert blocked.headers["retry-after"] == "900"
+        # верный пароль после блокировки тоже не пускает: иначе лимит можно обойти подбором
+        assert (await log_in(client)).status_code == 429
+    async with client_from(app, "10.0.0.2") as other_ip:
+        assert (await log_in(other_ip)).status_code == 200  # лимит на (e-mail, IP)
+    async with client_from(app, "10.0.0.1") as same_ip:
+        assert (await log_in(same_ip, email="nobody@example.com")).status_code == 401
+
+
+async def test_successful_logins_do_not_use_up_the_limit(
+    app: FastAPI, database: Database, passwords: PasswordService
+) -> None:
+    await create_user(database, passwords)
+    async with client_from(app, "10.0.0.3") as client:
+        for _ in range(8):
+            assert (await log_in(client)).status_code == 200
+
+
+async def test_login_limit_is_case_insensitive_for_email(
+    app: FastAPI, database: Database, passwords: PasswordService
+) -> None:
+    await create_user(database, passwords)
+    async with client_from(app, "10.0.0.4") as client:
+        for variant in ("anna@example.com", "ANNA@example.com", " Anna@Example.com ") * 2:
+            await log_in(client, email=variant, password="wrong-password-1")
+        assert (await log_in(client)).status_code == 429
+
+
+async def test_sixth_registration_from_one_ip_is_rate_limited(app: FastAPI) -> None:
+    async with client_from(app, "10.0.1.1") as client:
+        for index in range(5):
+            assert (await register(client, email=f"user{index}@example.com")).status_code == 201
+        blocked = await register(client, email="user9@example.com")
+        assert blocked.status_code == 429
+        assert blocked.headers["retry-after"] == "3600"
+        assert blocked.json()["code"] == "too_many_attempts"
+    async with client_from(app, "10.0.1.2") as other_ip:
+        assert (await register(other_ip, email="user9@example.com")).status_code == 201
+
+
+async def test_invalid_registrations_also_count(app: FastAPI) -> None:
+    async with client_from(app, "10.0.1.3") as client:
+        for _ in range(5):
+            assert (await register(client, email="x@other.com")).status_code == 422
+        assert (await register(client)).status_code == 429
