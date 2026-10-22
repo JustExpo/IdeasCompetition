@@ -1,8 +1,7 @@
 """Связка запроса с модулем сессий: cookie и действующее лицо."""
 
-from typing import Final, cast
+from typing import Final
 
-from fastapi import Request
 from starlette.requests import HTTPConnection
 
 from app.auth.model import Actor
@@ -35,8 +34,3 @@ async def resolve_request_actor(connection: HTTPConnection) -> Actor | None:
     database: Database = state.database
     clock: Clock = state.clock
     return await resolve_actor(database, clock, token)
-
-
-def get_current_actor(request: Request) -> Actor:
-    """Действующее лицо; доступно только на маршрутах с политикой, отличной от PUBLIC."""
-    return cast(Actor, request.state.actor)

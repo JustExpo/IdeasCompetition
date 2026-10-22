@@ -1,5 +1,6 @@
 """Сценарии над учётными записями. Вызывающий открывает транзакцию (`run_in_transaction`)."""
 
+from collections.abc import Collection
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,6 +61,11 @@ async def find_credentials(session: AsyncSession, email: str) -> UserCredentials
 
 async def get_user(session: AsyncSession, user_id: UserId) -> User | None:
     return await dao.select_user_by_id(session, user_id)
+
+
+async def get_user_names(session: AsyncSession, user_ids: Collection[UserId]) -> dict[UserId, str]:
+    """Только имена, без e-mail: ими подписывают авторов идей после финала."""
+    return await dao.select_user_names(session, user_ids)
 
 
 async def replace_password_hash(session: AsyncSession, user_id: UserId, password_hash: str) -> None:

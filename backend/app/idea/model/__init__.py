@@ -8,6 +8,7 @@ from app.idea.model.idea import (
     Idea,
     IdeaContent,
 )
+from app.idea.model.listing import IdeaListing, ListedIdea
 from app.idea.model.policy import (
     can_delete_idea,
     can_edit_idea,
@@ -16,6 +17,7 @@ from app.idea.model.policy import (
     ensure_can_edit_idea,
     ensure_can_submit_idea,
 )
+from app.idea.model.submission import SubmittedIdea, compute_request_hash
 
 __all__ = [
     "DESCRIPTION_MAX_LENGTH",
@@ -24,9 +26,13 @@ __all__ = [
     "TITLE_MAX_LENGTH",
     "Idea",
     "IdeaContent",
+    "IdeaListing",
+    "ListedIdea",
+    "SubmittedIdea",
     "can_delete_idea",
     "can_edit_idea",
     "can_view_idea",
+    "compute_request_hash",
     "ensure_can_delete_idea",
     "ensure_can_edit_idea",
     "ensure_can_submit_idea",

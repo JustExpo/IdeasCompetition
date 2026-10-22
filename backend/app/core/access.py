@@ -7,9 +7,9 @@
 
 from collections.abc import Awaitable, Callable
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, cast
 
-from fastapi import Depends, FastAPI, params
+from fastapi import Depends, FastAPI, Request, params
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute, APIWebSocketRoute
 from starlette.requests import HTTPConnection
@@ -20,6 +20,7 @@ from app.common.exception import (
     NotAuthenticatedError,
     OrganizerCannotParticipateError,
 )
+from app.common.model import Actor
 from app.core.logging import bind_log_context
 
 API_PREFIX = "/api"
@@ -91,6 +92,15 @@ def require(policy: Policy) -> params.Depends:
     """Вернуть элемент `dependencies=[…]` маршрута или роутера."""
     dependency: params.Depends = Depends(RequirePolicy(policy))
     return dependency
+
+
+def get_current_actor(request: Request) -> Actor:
+    """Действующее лицо; доступно только на маршрутах с политикой, отличной от PUBLIC.
+
+    Лежит в `core`, а не в `auth.controller`: контроллеры других модулей не импортируют
+    чужие контроллеры (§4.2), а `Actor` — общий тип из `common.model`.
+    """
+    return cast(Actor, request.state.actor)
 
 
 def _find_policies(dependant: Dependant) -> list[Policy]:

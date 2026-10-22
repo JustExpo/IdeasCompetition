@@ -1,5 +1,6 @@
 """Запросы к таблице пользователей. Транзакцией управляет service."""
 
+from collections.abc import Collection
 from datetime import datetime
 
 from sqlalchemy import func, select, update
@@ -57,6 +58,15 @@ async def select_credentials_by_email(session: AsyncSession, email: str) -> User
 async def select_user_by_id(session: AsyncSession, user_id: UserId) -> User | None:
     row = await session.get(UserRow, user_id)
     return None if row is None else _to_user(row)
+
+
+async def select_user_names(
+    session: AsyncSession, user_ids: Collection[UserId]
+) -> dict[UserId, str]:
+    if not user_ids:
+        return {}
+    rows = await session.execute(select(UserRow.id, UserRow.name).where(UserRow.id.in_(user_ids)))
+    return {UserId(user_id): name for user_id, name in rows}
 
 
 async def update_password_hash(session: AsyncSession, user_id: UserId, password_hash: str) -> None:

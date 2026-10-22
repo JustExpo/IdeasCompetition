@@ -19,6 +19,8 @@ function contest(id: number, phase: ContestSummary["phase"] = "submission"): Con
   return {
     id,
     topic: `Тема ${String(id)}`,
+    description: "Описание",
+    created_at: "2026-10-20T10:00:00+00:00",
     submission_deadline: "2026-10-24T15:00:00+00:00",
     voting_deadline: "2026-10-26T15:00:00+00:00",
     phase,

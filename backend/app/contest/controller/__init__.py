@@ -1,1 +1,5 @@
-"""contest.controller — hTTP- и WebSocket-эндпоинты FastAPI модуля."""
+"""contest.controller — маршруты конкурсов."""
+
+from app.contest.controller.router import router
+
+__all__ = ["router"]

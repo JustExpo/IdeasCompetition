@@ -3,7 +3,13 @@
 from app.contest.exception.errors import (
     ContestNotFoundError,
     DeadlineInPastError,
+    DeadlinesOrderError,
     InvalidContestError,
 )
 
-__all__ = ["ContestNotFoundError", "DeadlineInPastError", "InvalidContestError"]
+__all__ = [
+    "ContestNotFoundError",
+    "DeadlineInPastError",
+    "DeadlinesOrderError",
+    "InvalidContestError",
+]

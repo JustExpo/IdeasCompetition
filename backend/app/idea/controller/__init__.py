@@ -1,1 +1,5 @@
-"""idea.controller — hTTP- и WebSocket-эндпоинты FastAPI модуля."""
+"""idea.controller — маршруты подачи и правки идеи."""
+
+from app.idea.controller.router import router
+
+__all__ = ["router"]
