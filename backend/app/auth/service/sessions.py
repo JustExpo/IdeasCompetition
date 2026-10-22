@@ -142,7 +142,7 @@ async def resolve_actor(database: Database, clock: Clock, token: str) -> Actor |
         user = await user_service.get_user(session, found.user_id)
         if user is None or not user.is_active:
             return None
-        return Actor(user_id=user.id, role=user.role)
+        return Actor(user_id=user.id, role=user.role, is_active=user.is_active)
 
     return await database.run_in_transaction(work)
 

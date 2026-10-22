@@ -1,5 +1,6 @@
 """common.model — общие типы доменных моделей."""
 
+from app.common.model.actor import Actor, UserRole, ensure_actor_active
 from app.common.model.password import (
     PASSWORD_MAX_LENGTH,
     PASSWORD_MIN_LENGTH,
@@ -13,9 +14,12 @@ __all__ = [
     "MULTILINE_ALLOWED",
     "PASSWORD_MAX_LENGTH",
     "PASSWORD_MIN_LENGTH",
+    "Actor",
     "ContestId",
     "IdeaId",
     "UserId",
+    "UserRole",
+    "ensure_actor_active",
     "has_forbidden_chars",
     "is_password_length_valid",
     "normalize_password",

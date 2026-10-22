@@ -81,13 +81,7 @@ async def session(database: Database) -> AsyncIterator[AsyncSession]:
         await outer.rollback()
 
 
-@pytest.fixture(autouse=True)
-async def clean_tables_after_commits(
-    request: pytest.FixtureRequest, database_url: str
-) -> AsyncIterator[None]:
-    yield
-    if request.node.get_closest_marker("commits") is None:
-        return
+async def truncate_all_tables(database_url: str) -> None:
     tables = [table.name for table in Base.metadata.sorted_tables]
     if not tables:
         return
@@ -95,6 +89,20 @@ async def clean_tables_after_commits(
     async with engine.begin() as connection:
         await connection.execute(text(f"TRUNCATE {', '.join(tables)} RESTART IDENTITY CASCADE"))
     await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+async def clean_tables_around_commits(
+    request: pytest.FixtureRequest, database_url: str
+) -> AsyncIterator[None]:
+    # Очистка и до теста: другой тест (например, запуск лаунчера) мог оставить строки с
+    # настоящим commit, а commits-тест рассчитывает на пустые таблицы и порядок id.
+    commits = request.node.get_closest_marker("commits") is not None
+    if commits:
+        await truncate_all_tables(database_url)
+    yield
+    if commits:
+        await truncate_all_tables(database_url)
 
 
 @pytest.fixture
