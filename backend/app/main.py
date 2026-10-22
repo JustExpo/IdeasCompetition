@@ -3,6 +3,7 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 
@@ -22,6 +23,7 @@ from app.core.middleware import (
     RequestContextMiddleware,
 )
 from app.core.singleton import SingletonLock
+from app.core.spa import install_spa
 
 _log = get_logger(__name__)
 
@@ -34,10 +36,13 @@ def create_app(
     passwords: PasswordService | None = None,
     limiter: AttemptLimiter | None = None,
     bootstrap_organizer: bool = False,
+    spa_dir: Path | None = None,
 ) -> FastAPI:
     """`database`, `clock`, `passwords` подменяются в тестах; по умолчанию создаются из настроек
     (без подключения к БД). `singleton` и `bootstrap_organizer` передаёт лаунчер: `/api/health`
-    отвечает 503, если блокировка потеряна, а организатор из окружения создаётся при старте."""
+    отвечает 503, если блокировка потеряна, а организатор из окружения создаётся при старте.
+    `spa_dir` — каталог собранного SPA (`frontend/dist`); без него статика не раздаётся
+    (тесты, экспорт OpenAPI)."""
     database = database or Database(settings.database_url.get_secret_value())
     clock = clock or SystemClock()
     passwords = passwords or PasswordService()
@@ -79,6 +84,8 @@ def create_app(
     app.include_router(health_router)
     app.include_router(auth_router)
     ensure_routes_have_policy(app)
+    if spa_dir is not None:
+        install_spa(app, spa_dir)  # последним: catch-all не должен перекрывать маршруты /api
 
     # add_middleware ставит последнюю добавленную прослойку снаружи.
     app.add_middleware(BodyGuardMiddleware)

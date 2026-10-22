@@ -25,6 +25,11 @@ from app.core.logging import bind_log_context, clear_log_context, get_logger
 
 MAX_BODY_BYTES = 64 * 1024
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+# CSP из CLAUDE.md §9.3: SPA грузит только свои скрипты и стили и ходит только на свой origin.
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; "
+    "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+)
 _REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 _log = get_logger(__name__)
 
@@ -64,6 +69,7 @@ class RequestContextMiddleware:
                 headers[REQUEST_ID_HEADER] = request_id
                 headers["X-Content-Type-Options"] = "nosniff"
                 headers["Referrer-Policy"] = "no-referrer"
+                headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
                 if scope["path"].startswith(API_PREFIX):
                     headers["Cache-Control"] = "no-store"
             await send(message)

@@ -1,4 +1,17 @@
-# Образ приложения (CLAUDE.md §12): backend; сборка SPA добавляется в IC-015 отдельной стадией node.
+# Образ приложения (CLAUDE.md §12, Р1): SPA собирается стадией node и раздаётся тем же процессом.
+FROM node:22-slim AS spa
+
+WORKDIR /app/frontend
+
+# Сначала зависимости по lock-файлу: слой кэшируется, пока lock не меняется.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+# `npm run build` = проверка типов + vite build (openapi.json нужен для типов в frontend/).
+COPY frontend/ ./
+RUN npm run build
+
+
 FROM python:3.12-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
@@ -20,6 +33,8 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY backend/alembic.ini ./
 COPY backend/migrations ./migrations
 COPY backend/app ./app
+# Лаунчер ищет SPA в `frontend/dist` рядом с `backend/` (core/launcher.py: SPA_DIR).
+COPY --from=spa /app/frontend/dist /app/frontend/dist
 
 USER app
 EXPOSE 8000
