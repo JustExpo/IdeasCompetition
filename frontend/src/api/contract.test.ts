@@ -16,9 +16,14 @@ describe("контракт API (openapi.json)", () => {
     );
   });
 
-  it("временный контракт конкурсов (pendingContracts.ts) удалён, когда маршруты появились", () => {
-    // Если тест упал: IC-010 вошёл в main. Выполните `make contract`, удалите
-    // src/api/pendingContracts.ts и `PendingPaths` в client.ts, возьмите типы из schema.gen.ts.
-    expect(paths.filter((path) => path.startsWith("/api/contests"))).toEqual([]);
+  it("содержит маршруты конкурсов и идей, на которые опирается SPA", () => {
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        "/api/contests",
+        "/api/contests/{contest_id}",
+        "/api/contests/{contest_id}/ideas",
+        "/api/ideas/{idea_id}",
+      ]),
+    );
   });
 });

@@ -7,14 +7,13 @@ from fastapi import APIRouter, Depends, Request, Response
 from app.auth import service
 from app.auth.controller.dependencies import (
     COOKIE_MAX_AGE_S,
-    get_current_actor,
     is_secure_cookie,
     session_cookie_name,
 )
 from app.auth.controller.schemas import LoginRequest, RegisterRequest, UserResponse
 from app.auth.model import Actor
 from app.auth.service import IssuedSession
-from app.core.access import Policy, require
+from app.core.access import Policy, get_current_actor, require
 from app.core.clock import Clock
 from app.core.db import Database
 

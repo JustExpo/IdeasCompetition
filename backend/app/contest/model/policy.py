@@ -34,6 +34,15 @@ def can_view_results(actor: Actor, phase: ContestPhase) -> bool:
     return actor.is_active and (actor.is_organizer or phase is ContestPhase.FINISHED)
 
 
+def can_view_authors(actor: Actor, phase: ContestPhase) -> bool:
+    """Авторы раскрываются всем после финала и никому до него — в том числе организатору.
+
+    Правило лежит в `contest`, а не в `result`: список идей (модуль `vote`) тоже решает, показывать
+    ли авторов, а `vote` не может импортировать вышестоящий `result` (§4.2).
+    """
+    return actor.is_active and phase is ContestPhase.FINISHED
+
+
 def allowed_actions(actor: Actor, phase: ContestPhase) -> frozenset[ContestAction]:
     actions = {
         ContestAction.SUBMIT_IDEA: can_submit_ideas(actor, phase),

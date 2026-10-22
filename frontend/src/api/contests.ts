@@ -1,12 +1,10 @@
 import { apiClient, unwrap } from "./client";
-import type {
-  ContestCreateRequest,
-  ContestList,
-  ContestPhase,
-  ContestSummary,
-} from "./pendingContracts";
+import type { components } from "./schema.gen";
 
-export type { ContestCreateRequest, ContestList, ContestPhase, ContestSummary };
+export type ContestCreateRequest = components["schemas"]["CreateContestRequest"];
+export type ContestList = components["schemas"]["ContestListResponse"];
+export type ContestPhase = components["schemas"]["ContestPhase"];
+export type ContestSummary = components["schemas"]["ContestResponse"];
 
 export const CONTESTS_PAGE_SIZE = 20;
 

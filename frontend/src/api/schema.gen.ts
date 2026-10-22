@@ -72,6 +72,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/contests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Contests */
+        get: operations["get_contests_api_contests_get"];
+        put?: never;
+        /** Post Contest */
+        post: operations["post_contest_api_contests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contests/{contest_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Contest */
+        get: operations["get_contest_api_contests__contest_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contests/{contest_id}/ideas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Contest Ideas */
+        get: operations["get_contest_ideas_api_contests__contest_id__ideas_get"];
+        put?: never;
+        /** Post Idea */
+        post: operations["post_idea_api_contests__contest_id__ideas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -89,14 +142,215 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ideas/{idea_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Idea */
+        patch: operations["patch_idea_api_ideas__idea_id__patch"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ContestAction
+         * @description Действия уровня конкурса; фронт показывает кнопки по ним и не дублирует правила фаз.
+         * @enum {string}
+         */
+        ContestAction: "submit_idea" | "vote" | "view_results";
+        /**
+         * ContestDetailResponse
+         * @description Карточка конкурса: клиент не дублирует правила фаз, а читает `allowed_actions`.
+         */
+        ContestDetailResponse: {
+            /** Allowed Actions */
+            allowed_actions: components["schemas"]["ContestAction"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string;
+            /** Id */
+            id: number;
+            phase: components["schemas"]["ContestPhase"];
+            /**
+             * Server Time
+             * Format: date-time
+             */
+            server_time: string;
+            /**
+             * Submission Deadline
+             * Format: date-time
+             */
+            submission_deadline: string;
+            /**
+             * Tie Break Rule
+             * @default Побеждает идея с наибольшим числом голосов. При равенстве голосов побеждает идея, поданная раньше.
+             */
+            tie_break_rule: string;
+            /** Topic */
+            topic: string;
+            /**
+             * Voting Deadline
+             * Format: date-time
+             */
+            voting_deadline: string;
+        };
+        /** ContestListResponse */
+        ContestListResponse: {
+            /** Items */
+            items: components["schemas"]["ContestResponse"][];
+            /**
+             * Server Time
+             * Format: date-time
+             */
+            server_time: string;
+            /** Total */
+            total: number;
+        };
+        /**
+         * ContestPhase
+         * @description Фаза не хранится в БД, а вычисляется из времени: закрытию раунда нечему «не сработать».
+         * @enum {string}
+         */
+        ContestPhase: "submission" | "voting" | "finished";
+        /**
+         * ContestResponse
+         * @description Конкурс в списке.
+         */
+        ContestResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string;
+            /** Id */
+            id: number;
+            phase: components["schemas"]["ContestPhase"];
+            /**
+             * Submission Deadline
+             * Format: date-time
+             */
+            submission_deadline: string;
+            /** Topic */
+            topic: string;
+            /**
+             * Voting Deadline
+             * Format: date-time
+             */
+            voting_deadline: string;
+        };
+        /** CreateContestRequest */
+        CreateContestRequest: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Submission Deadline
+             * Format: date-time
+             */
+            submission_deadline: string;
+            /** Topic */
+            topic: string;
+            /**
+             * Voting Deadline
+             * Format: date-time
+             */
+            voting_deadline: string;
+        };
+        /** EditIdeaRequest */
+        EditIdeaRequest: {
+            /** Description */
+            description: string;
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * FinishedIdeaItem
+         * @description Итоги: авторы раскрыты.
+         */
+        FinishedIdeaItem: {
+            /** Author Name */
+            author_name: string;
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Mine */
+            is_mine: boolean;
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+            /** Title */
+            title: string;
+        };
+        /** FinishedIdeasResponse */
+        FinishedIdeasResponse: {
+            /** Items */
+            items: components["schemas"]["FinishedIdeaItem"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            phase: "finished";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * IdeaResponse
+         * @description Своя идея автора: автор знает, что она его, поэтому время подачи и версия показываются.
+         */
+        IdeaResponse: {
+            /** Contest Id */
+            contest_id: number;
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -104,6 +358,33 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /**
+         * OwnIdeaItem
+         * @description Приём идей: пользователь видит только свои идеи, поэтому версия и время ему известны.
+         */
+        OwnIdeaItem: {
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
         };
         /** RegisterRequest */
         RegisterRequest: {
@@ -113,6 +394,28 @@ export interface components {
             name: string;
             /** Password */
             password: string;
+        };
+        /** SubmissionIdeasResponse */
+        SubmissionIdeasResponse: {
+            /** Items */
+            items: components["schemas"]["OwnIdeaItem"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            phase: "submission";
+        };
+        /** SubmitIdeaRequest */
+        SubmitIdeaRequest: {
+            /**
+             * Client Request Id
+             * Format: uuid
+             */
+            client_request_id: string;
+            /** Description */
+            description: string;
+            /** Title */
+            title: string;
         };
         /**
          * UserResponse
@@ -140,6 +443,33 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * VotingIdeaItem
+         * @description Голосование: идея без автора и без времени подачи (по нему вычисляется автор).
+         */
+        VotingIdeaItem: {
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Mine */
+            is_mine: boolean;
+            /** Title */
+            title: string;
+        };
+        /** VotingIdeasResponse */
+        VotingIdeasResponse: {
+            /** Items */
+            items: components["schemas"]["VotingIdeaItem"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            phase: "voting";
         };
     };
     responses: never;
@@ -254,6 +584,168 @@ export interface operations {
             };
         };
     };
+    get_contests_api_contests_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContestListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_contest_api_contests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateContestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContestDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_contest_api_contests__contest_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contest_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContestDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_contest_ideas_api_contests__contest_id__ideas_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contest_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmissionIdeasResponse"] | components["schemas"]["VotingIdeasResponse"] | components["schemas"]["FinishedIdeasResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_idea_api_contests__contest_id__ideas_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contest_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitIdeaRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdeaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_health_api_health_get: {
         parameters: {
             query?: never;
@@ -272,6 +764,41 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    patch_idea_api_ideas__idea_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                idea_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditIdeaRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdeaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

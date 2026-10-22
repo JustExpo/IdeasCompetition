@@ -16,3 +16,9 @@ class InvalidContestError(DomainValidationError):
 
 class DeadlineInPastError(DomainValidationError):
     code = "deadline_in_past"
+
+
+class DeadlinesOrderError(InvalidContestError):
+    """Приём идей должен закрываться раньше голосования (равные дедлайны тоже не подходят)."""
+
+    code = "deadlines_order"

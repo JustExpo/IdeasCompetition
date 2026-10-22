@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from app.auth.controller import resolve_request_actor
 from app.auth.controller import router as auth_router
 from app.auth.service import AttemptLimiter, PasswordService, ensure_organizer
+from app.contest.controller import router as contest_router
 from app.core.access import ensure_routes_have_policy
 from app.core.clock import Clock, SystemClock
 from app.core.config import Settings
@@ -24,6 +25,8 @@ from app.core.middleware import (
 )
 from app.core.singleton import SingletonLock
 from app.core.spa import install_spa
+from app.idea.controller import router as idea_router
+from app.vote.controller import router as vote_router
 
 _log = get_logger(__name__)
 
@@ -83,6 +86,9 @@ def create_app(
     install_error_handlers(app)
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(contest_router)
+    app.include_router(idea_router)
+    app.include_router(vote_router)
     ensure_routes_have_policy(app)
     if spa_dir is not None:
         install_spa(app, spa_dir)  # последним: catch-all не должен перекрывать маршруты /api
