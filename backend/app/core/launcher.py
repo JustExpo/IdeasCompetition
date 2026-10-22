@@ -31,6 +31,8 @@ HOST: Final = "0.0.0.0"  # noqa: S104 — слушаем внутри конте
 PORT: Final = 8000
 GRACEFUL_SHUTDOWN_S: Final = 10
 BACKEND_DIR: Final = Path(__file__).resolve().parents[2]
+# Собранный SPA: в образе `/app/frontend/dist`, при локальном запуске — `frontend/dist` репозитория.
+SPA_DIR: Final = BACKEND_DIR.parent / "frontend" / "dist"
 STARTUP_FAILURE_EXIT_CODE: Final = 1
 HANDLED_SIGNALS: Final = (signal.SIGINT, signal.SIGTERM)
 
@@ -83,7 +85,13 @@ async def serve(settings: Settings) -> int:
         await asyncio.to_thread(run_migrations, url)
         await database.ensure_schema_is_current()
 
-        app = create_app(settings, database, singleton, bootstrap_organizer=True)
+        app = create_app(
+            settings,
+            database,
+            singleton,
+            bootstrap_organizer=True,
+            spa_dir=SPA_DIR if SPA_DIR.is_dir() else None,
+        )
         server = DrainingServer(
             uvicorn.Config(
                 app,
