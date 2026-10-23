@@ -64,7 +64,7 @@ async def call(app: FastAPI, policy: Policy, role: str | None) -> httpx.Response
         (Policy.ORGANIZER, None, 401, "not_authenticated"),
         (Policy.ORGANIZER, "employee", 403, "forbidden"),
         (Policy.ORGANIZER, "organizer", 200, None),
-        # Тестовые маршруты закрыты, пока не подключён режим e2e (отдельная задача).
+        # Тестовые маршруты закрыты вне режима e2e (в режиме e2e — `test_testing_clock.py`).
         (Policy.E2E_ONLY, "organizer", 401, "not_authenticated"),
     ],
 )

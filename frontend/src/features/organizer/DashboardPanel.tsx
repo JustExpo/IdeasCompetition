@@ -5,13 +5,11 @@ import { useDashboard } from "./queries";
 
 interface DashboardPanelProps {
   contestId: number;
-  /** Конкурс ещё не завершён: цифры меняются, поэтому панель опрашивает сервер. */
-  live: boolean;
 }
 
 /** Экран организатора (Ф5): число идей, число проголосовавших и текущие места без авторов. */
-export function DashboardPanel({ contestId, live }: DashboardPanelProps) {
-  const dashboard = useDashboard(contestId, live);
+export function DashboardPanel({ contestId }: DashboardPanelProps) {
+  const dashboard = useDashboard(contestId);
   if (dashboard.isPending) {
     return <p role="status">Загрузка данных конкурса…</p>;
   }
@@ -28,7 +26,7 @@ export function DashboardPanel({ contestId, live }: DashboardPanelProps) {
       {dashboard.isError ? (
         // Последние цифры остаются на экране: пропавшая связь не должна стирать картину.
         <Notice tone="error">
-          Нет связи с сервером: показаны последние полученные данные. Обновление продолжится само.
+          Не удалось обновить данные: показаны последние полученные. Попробуйте обновить позже.
         </Notice>
       ) : null}
       <DashboardView dashboard={dashboard.data} />

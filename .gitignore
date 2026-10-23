@@ -24,3 +24,5 @@ coverage.xml
 .ruff_cache/
 .pytest_cache/
 .venv/
+
+coverage.json

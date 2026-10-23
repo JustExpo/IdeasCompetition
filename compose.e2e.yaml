@@ -1,0 +1,12 @@
+# Режим e2e единственного контейнера `app` (CLAUDE.md Р14): тот же контейнер и то же имя, другие
+# настройки. Подключается только скриптом `scripts/e2e.sh`: `docker compose -f compose.yaml -f compose.e2e.yaml`.
+# Отдельного тестового стека нет — второй контейнер приложения нарушил бы инвариант §12.
+services:
+  app:
+    # Значения из `environment` перекрывают `.env`.
+    environment:
+      APP_ENV: e2e
+      DATABASE_URL: postgresql+asyncpg://ideas:${POSTGRES_PASSWORD:-ideas-dev-password}@db:5432/ideas_e2e
+      TEST_CLOCK_ENABLED: "true"
+      RATE_LIMIT_PER_IP_ENABLED: "false"
+      SCHEDULER_INTERVAL_S: "5"

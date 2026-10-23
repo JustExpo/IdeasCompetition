@@ -1,6 +1,8 @@
 import { Link, Outlet } from "react-router-dom";
 
 import { LogoutButton, useSession } from "../features/auth";
+import { E2EBadge } from "../features/environment";
+import { NewVersionBanner } from "../features/realtime";
 
 /** Общая рамка защищённых экранов: заголовок, имя пользователя, выход. */
 export function AppShell() {
@@ -18,6 +20,8 @@ export function AppShell() {
           </div>
         ) : null}
       </header>
+      <E2EBadge />
+      <NewVersionBanner />
       <main>
         <Outlet />
       </main>

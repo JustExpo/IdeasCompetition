@@ -5,7 +5,7 @@ from typing import Final
 from starlette.requests import HTTPConnection
 
 from app.auth.model import Actor
-from app.auth.service import SESSION_LIFETIME, resolve_actor
+from app.auth.service import SESSION_LIFETIME, hash_session_token, resolve_actor
 from app.core.clock import Clock
 from app.core.config import Settings
 from app.core.db import Database
@@ -34,3 +34,9 @@ async def resolve_request_actor(connection: HTTPConnection) -> Actor | None:
     database: Database = state.database
     clock: Clock = state.clock
     return await resolve_actor(database, clock, token)
+
+
+def request_session_key(connection: HTTPConnection) -> bytes | None:
+    """Ключ сессии запроса (хэш токена): по нему шина закрывает WebSocket при выходе."""
+    token = connection.cookies.get(session_cookie_name(connection.app.state.settings))
+    return hash_session_token(token) if token else None

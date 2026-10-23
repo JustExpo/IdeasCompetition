@@ -5,10 +5,11 @@
 """
 
 from app.common.exception import OrganizerCannotParticipateError
-from app.common.model import Actor, ensure_actor_active
+from app.common.model import Actor, ContestId, UserRole, ensure_actor_active
 from app.contest.model import ContestPhase, can_submit_ideas
 from app.idea.exception import IdeaLockedError, IdeaNotFoundError, SubmissionClosedError
 from app.idea.model.idea import Idea
+from app.realtime.model import Audience, ContestEvent, EventType, PlannedEvent
 
 
 def can_view_idea(actor: Actor, idea: Idea, phase: ContestPhase) -> bool:
@@ -61,3 +62,36 @@ def ensure_can_delete_idea(actor: Actor, idea: Idea, phase: ContestPhase) -> Non
         raise OrganizerCannotParticipateError("Организатор не удаляет идеи.")
     if not can_delete_idea(actor, idea, phase):
         raise IdeaLockedError("Конкурс завершён, идею нельзя удалить.")
+
+
+_ORGANIZERS = Audience(roles=frozenset({UserRole.ORGANIZER}))
+_EVERYONE = Audience(roles=frozenset({UserRole.EMPLOYEE, UserRole.ORGANIZER}))
+
+
+def plan_idea_events(
+    contest_id: ContestId, idea: Idea, phase: ContestPhase, *, deleted: bool
+) -> tuple[PlannedEvent, ...]:
+    """Кому сообщить об изменении идеи (П3, П7, П11; CLAUDE.md §8.2).
+
+    В приёме идея видна только автору, поэтому и сигнал получает только он; организатору уходит
+    `results_changed` (у него меняются счётчики), но не сигнал об идее. Удаление в голосовании
+    видят все: идея исчезает из общего списка вместе с голосами. После финала идеи неизменны.
+    """
+    if phase is ContestPhase.FINISHED:
+        return ()
+    results_changed = PlannedEvent(
+        ContestEvent(EventType.RESULTS_CHANGED, contest_id=contest_id), _ORGANIZERS
+    )
+    if phase is ContestPhase.SUBMISSION:
+        author_changed = PlannedEvent(
+            ContestEvent(EventType.IDEAS_CHANGED, contest_id=contest_id),
+            Audience(users=frozenset({idea.author_id})),
+        )
+        return (author_changed, results_changed)
+    if deleted:
+        deleted_for_all = PlannedEvent(
+            ContestEvent(EventType.IDEA_DELETED, contest_id=contest_id, idea_id=idea.id),
+            _EVERYONE,
+        )
+        return (deleted_for_all, results_changed)
+    return ()

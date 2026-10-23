@@ -1,13 +1,16 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { describeError, isOrganizer, type ContestDetail } from "../api";
-import { useSession } from "../features/auth";
+import { sessionKey, useSession } from "../features/auth";
 import { ContestCard, useContest } from "../features/contests";
 import { DeleteIdeaButton, SubmissionIdeas, useIdeasListing } from "../features/ideas";
 import { DashboardPanel } from "../features/organizer";
+import { ConnectionBanner, useContestEvents } from "../features/realtime";
 import { ResultsTable } from "../features/results";
 import { VotingList } from "../features/voting";
+import { clearLateAction, useLateAction } from "../shared/lib/lateAction";
 import { contestScope } from "../shared/lib/queryKeys";
 import { useDeadlineRefetch } from "../shared/lib/useDeadlineRefetch";
 import { EmptyState } from "../shared/ui/EmptyState";
@@ -30,6 +33,15 @@ function ContestScreen({ contestId }: { contestId: number }) {
   const session = useSession();
   const contest = useContest(contestId);
   const queryClient = useQueryClient();
+  const lateAction = useLateAction();
+  useEffect(() => clearLateAction, [contestId]);
+  // Изменения других пользователей приходят сигналами по WebSocket; сессия закончилась —
+  // перечитываем профиль, и экран возвращает на вход.
+  const connection = useContestEvents(contestId, {
+    onSessionEnded: () => {
+      void queryClient.invalidateQueries({ queryKey: sessionKey });
+    },
+  });
   // В момент дедлайна (по серверному времени) перечитываем всё: экран сам переходит к
   // следующей фазе, даже если страница открыта. Запоздавшую запись всё равно отклонит сервер.
   useDeadlineRefetch(
@@ -63,6 +75,12 @@ function ContestScreen({ contestId }: { contestId: number }) {
       <p>
         <Link to="/">← Все конкурсы</Link>
       </p>
+      <ConnectionBanner status={connection} />
+      {lateAction === null ? null : (
+        <Notice tone="error">
+          {lateAction} Действие не выполнено: страница показывает актуальное состояние конкурса.
+        </Notice>
+      )}
       <ContestCard contest={contest.data} />
       {organizer ? (
         <OrganizerBody contestId={contestId} contest={contest.data} />
@@ -77,7 +95,7 @@ function OrganizerBody({ contestId, contest }: { contestId: number; contest: Con
   const finished = contest.phase === "finished";
   return (
     <>
-      <DashboardPanel contestId={contestId} live={!finished} />
+      <DashboardPanel contestId={contestId} />
       {finished ? <ResultsTable contestId={contestId} /> : null}
     </>
   );

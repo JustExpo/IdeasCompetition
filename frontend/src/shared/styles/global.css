@@ -313,3 +313,13 @@ a {
 .results .winner {
   font-weight: 700;
 }
+
+.e2e-badge {
+  display: inline-block;
+  margin: 0 0 0.5rem;
+  padding: 0.125rem 0.5rem;
+  border: 2px solid currentColor;
+  border-radius: 4px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}

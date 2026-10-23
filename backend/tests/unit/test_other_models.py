@@ -82,11 +82,9 @@ def test_outbox_email() -> None:
 
 def test_event_invariants() -> None:
     ContestEvent(EventType.IDEAS_CHANGED, contest_id=ContestId(1))
-    ContestEvent(EventType.SESSION_REVOKED, user_id=UserId(1))
+    ContestEvent(EventType.SESSION_REVOKED)
     ContestEvent(EventType.IDEA_DELETED, contest_id=ContestId(1), idea_id=IdeaId(uuid4()))
     with pytest.raises(DomainValidationError):
-        ContestEvent(EventType.PHASE_CHANGED)
-    with pytest.raises(DomainValidationError):
-        ContestEvent(EventType.SESSION_REVOKED, contest_id=ContestId(1))
+        ContestEvent(EventType.IDEAS_CHANGED)
     with pytest.raises(DomainValidationError):
         ContestEvent(EventType.IDEA_DELETED, contest_id=ContestId(1))

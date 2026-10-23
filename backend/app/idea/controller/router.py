@@ -36,6 +36,7 @@ async def post_idea(
         client_request_id=body.client_request_id,
         title=body.title,
         description=body.description,
+        events=state.events,
     )
     if not submitted.created:
         response.status_code = 200  # повтор уже принятого запроса (§8.3)
@@ -55,6 +56,7 @@ async def patch_idea(
         title=body.title,
         description=body.description,
         version=body.version,
+        events=state.events,
     )
     return IdeaResponse.from_idea(idea)
 
@@ -62,5 +64,7 @@ async def patch_idea(
 @router.delete("/api/ideas/{idea_id}", status_code=204, dependencies=[require(Policy.EMPLOYEE)])
 async def delete_idea(idea_id: UUID, request: Request, actor: CurrentActor) -> Response:
     state = request.app.state
-    await service.delete_idea(state.database, state.clock, actor, IdeaId(idea_id))
+    await service.delete_idea(
+        state.database, state.clock, actor, IdeaId(idea_id), events=state.events
+    )
     return Response(status_code=204)

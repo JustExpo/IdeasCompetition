@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-from app.auth.controller import resolve_request_actor
+from app.auth.controller import request_session_key, resolve_request_actor
 from app.auth.controller import router as auth_router
 from app.auth.service import AttemptLimiter, PasswordService, ensure_organizer
 from app.contest.controller import router as contest_router
@@ -27,9 +27,13 @@ from app.core.middleware import (
 from app.core.scheduler import ScheduledJob, Scheduler
 from app.core.singleton import SingletonLock
 from app.core.spa import install_spa
+from app.core.testing import OffsetClock
+from app.core.testing import router as test_clock_router
 from app.idea.controller import router as idea_router
 from app.notification.handler import run_email_delivery
 from app.notification.service import EmailSender, SmtpEmailSender
+from app.realtime.controller import router as realtime_router
+from app.realtime.service import EventHub
 from app.reminder.handler import run_reminders
 from app.result.controller import router as result_router
 from app.result.handler import run_finalization
@@ -48,16 +52,19 @@ def create_app(
     bootstrap_organizer: bool = False,
     spa_dir: Path | None = None,
     email_sender: EmailSender | None = None,
+    event_hub: EventHub | None = None,
 ) -> FastAPI:
     """`database`, `clock`, `passwords` подменяются в тестах; по умолчанию создаются из настроек
     (без подключения к БД). `singleton` и `bootstrap_organizer` передаёт лаунчер: `/api/health`
     отвечает 503, если блокировка потеряна, а организатор из окружения создаётся при старте.
     `spa_dir` — каталог собранного SPA (`frontend/dist`); без него статика не раздаётся
-    (тесты, экспорт OpenAPI). `email_sender` — почтовый адаптер; по умолчанию SMTP из настроек."""
+    (тесты, экспорт OpenAPI). `email_sender` — почтовый адаптер; по умолчанию SMTP из настроек.
+    `event_hub` — шина событий для открытых вкладок (один экземпляр на процесс, Р8)."""
     database = database or Database(settings.database_url.get_secret_value())
-    clock = clock or SystemClock()
+    clock = clock or (OffsetClock() if settings.test_clock_enabled else SystemClock())
     passwords = passwords or PasswordService()
     limiter = limiter or AttemptLimiter(per_ip_enabled=settings.rate_limit_per_ip_enabled)
+    events = event_hub or EventHub()
 
     sender = email_sender or SmtpEmailSender(
         settings.smtp_host, settings.smtp_port, str(settings.mail_from)
@@ -103,6 +110,7 @@ def create_app(
         if settings.run_scheduler:
             scheduler.start()
         yield
+        events.close_all()  # клиенты переподключатся (1012) и перечитают данные
         await scheduler.stop()
         await database.dispose()
 
@@ -123,6 +131,8 @@ def create_app(
     app.state.limiter = limiter
     app.state.scheduler = scheduler
     app.state.actor_resolver = resolve_request_actor
+    app.state.session_key_resolver = request_session_key
+    app.state.events = events
 
     install_error_handlers(app)
     app.include_router(health_router)
@@ -131,6 +141,9 @@ def create_app(
     app.include_router(idea_router)
     app.include_router(vote_router)
     app.include_router(result_router)
+    app.include_router(realtime_router)
+    if settings.test_clock_enabled:  # в dev и prod маршрута нет вовсе (CLAUDE.md §9.3)
+        app.include_router(test_clock_router)
     ensure_routes_have_policy(app)
     if spa_dir is not None:
         install_spa(app, spa_dir)  # последним: catch-all не должен перекрывать маршруты /api
@@ -138,5 +151,5 @@ def create_app(
     # add_middleware ставит последнюю добавленную прослойку снаружи.
     app.add_middleware(BodyGuardMiddleware)
     app.add_middleware(OriginGuardMiddleware, allowed_origins=settings.allowed_origins)
-    app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(RequestContextMiddleware, build=settings.app_build, mode=settings.app_env)
     return app

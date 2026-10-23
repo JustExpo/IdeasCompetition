@@ -1,1 +1,5 @@
-"""realtime.exception — исключения модуля со стабильным кодом ошибки для API."""
+"""realtime.exception — ошибки реального времени."""
+
+from app.realtime.exception.errors import TooManyConnectionsError
+
+__all__ = ["TooManyConnectionsError"]

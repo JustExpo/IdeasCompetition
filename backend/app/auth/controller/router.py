@@ -83,7 +83,7 @@ async def post_logout(request: Request, response: Response) -> None:
     name = session_cookie_name(state.settings)
     token = request.cookies.get(name)
     if token:  # политика уже проверила, что cookie есть; страховка от гонки
-        await service.log_out(state.database, state.clock, token)
+        await service.log_out(state.database, state.clock, token, events=state.events)
     response.delete_cookie(
         name,
         path="/",

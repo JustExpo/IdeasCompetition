@@ -5,7 +5,7 @@ POSTGRES_PASSWORD ?= ideas-dev-password
 TEST_DATABASE_URL ?= postgresql+asyncpg://ideas:$(POSTGRES_PASSWORD)@127.0.0.1:5433/ideas_test
 
 .DEFAULT_GOAL := help
-.PHONY: help up down restart logs migrate psql cli test-unit test-int check contract test-contract
+.PHONY: help up down restart logs migrate psql cli test-unit test-int e2e check contract test-contract
 
 help: ## Список команд
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/'
@@ -38,6 +38,9 @@ test-int: ## Integration-тесты на БД ideas_test в контейнере
 	@$(COMPOSE) exec -T db psql -U ideas -d ideas -tAc "SELECT 1 FROM pg_database WHERE datname = 'ideas_test'" | grep -q 1 \
 		|| $(COMPOSE) exec -T db createdb -U ideas ideas_test
 	cd backend && TEST_DATABASE_URL='$(TEST_DATABASE_URL)' uv run pytest -m integration
+
+e2e: ## E2E в браузере: app на время прогона переходит в режим e2e (БД ideas_e2e), затем возвращается
+	@./scripts/e2e.sh
 
 check: ## Формат, линтер, типы, границы модулей (backend и frontend)
 	cd backend && uv run ruff format --check . && uv run ruff check . && uv run mypy app tests && uv run lint-imports
