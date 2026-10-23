@@ -73,3 +73,22 @@ async def update_password_hash(session: AsyncSession, user_id: UserId, password_
     await session.execute(
         update(UserRow).where(UserRow.id == user_id).values(password_hash=password_hash)
     )
+
+
+async def select_users_by_ids(
+    session: AsyncSession, user_ids: Collection[UserId]
+) -> dict[UserId, User]:
+    if not user_ids:
+        return {}
+    rows = await session.scalars(select(UserRow).where(UserRow.id.in_(user_ids)))
+    return {UserId(row.id): _to_user(row) for row in rows}
+
+
+async def select_active_employees(session: AsyncSession) -> list[User]:
+    """Кому можно писать про конкурс: активные сотрудники (организатор не участвует)."""
+    statement = (
+        select(UserRow)
+        .where(UserRow.role == UserRole.EMPLOYEE.value, UserRow.is_active.is_(True))
+        .order_by(UserRow.id)
+    )
+    return [_to_user(row) for row in (await session.execute(statement)).scalars()]

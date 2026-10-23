@@ -1,1 +1,5 @@
-"""notification.exception — исключения модуля со стабильным кодом ошибки для API."""
+"""notification.exception — исключения модуля писем."""
+
+from app.notification.exception.errors import EmailDeliveryError
+
+__all__ = ["EmailDeliveryError"]

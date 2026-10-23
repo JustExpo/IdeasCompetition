@@ -1,10 +1,21 @@
 """Письмо в outbox: создаётся в транзакции события, отправляется отдельно (Р9)."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 from app.common.model import UserId, require_aware
+
+BATCH_SIZE = 20  # писем за один проход отправщика
+LEASE_DURATION = timedelta(seconds=60)  # столько письмо «закреплено» за проходом
+MAX_ATTEMPTS = 8
+RETRY_DELAY_MAX = timedelta(hours=1)
+
+
+def retry_delay(attempts: int) -> timedelta:
+    """Пауза перед повтором: `min(2^attempts минут, 1 час)`; `attempts` — уже сделанные попытки."""
+    # Показатель ограничен заранее: 2**attempts при большом `attempts` переполнил бы timedelta.
+    return min(timedelta(minutes=2 ** min(max(attempts, 0), 6)), RETRY_DELAY_MAX)
 
 
 class EmailKind(StrEnum):
@@ -58,3 +69,18 @@ class OutboxEmail:
 
     def is_expired_at(self, now: datetime) -> bool:
         return self.not_after is not None and now >= self.not_after
+
+
+@dataclass(frozen=True, slots=True)
+class OutgoingEmail:
+    """Письмо в виде, готовом к отправке. `message_id` детерминирован: повторная отправка
+    того же письма (at-least-once) несёт тот же Message-ID, и почтовый клиент склеит дубли."""
+
+    outbox_id: int
+    to_email: str = field(repr=False)
+    subject: str = field(repr=False)
+    body: str = field(repr=False)
+
+    @property
+    def message_id(self) -> str:
+        return f"<outbox-{self.outbox_id}@ideas-competition.local>"

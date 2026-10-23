@@ -7,7 +7,11 @@ from app.contest.service.contests import (
     find_contest,
     get_contest,
     list_contests,
+    list_contests_in_reminder_window,
+    list_unfinalized_contest_ids,
+    lock_contest_for_finalization,
     lock_contest_for_share,
+    record_finalization,
 )
 
 __all__ = [
@@ -17,5 +21,9 @@ __all__ = [
     "find_contest",
     "get_contest",
     "list_contests",
+    "list_contests_in_reminder_window",
+    "list_unfinalized_contest_ids",
+    "lock_contest_for_finalization",
     "lock_contest_for_share",
+    "record_finalization",
 ]

@@ -70,3 +70,12 @@ async def get_user_names(session: AsyncSession, user_ids: Collection[UserId]) ->
 
 async def replace_password_hash(session: AsyncSession, user_id: UserId, password_hash: str) -> None:
     await dao.update_password_hash(session, user_id, password_hash)
+
+
+async def get_users(session: AsyncSession, user_ids: Collection[UserId]) -> dict[UserId, User]:
+    """Учётные записи целиком (с e-mail): только для постановки писем, наружу не отдаются."""
+    return await dao.select_users_by_ids(session, user_ids)
+
+
+async def list_active_employees(session: AsyncSession) -> list[User]:
+    return await dao.select_active_employees(session)

@@ -1,14 +1,14 @@
 """Сценарии конкурсов: создание, список, карточка (CLAUDE.md §8.2)."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.model import Actor, ContestId
+from app.common.model import Actor, ContestId, IdeaId
 from app.contest import dao
 from app.contest.exception import ContestNotFoundError, DeadlineInPastError
-from app.contest.model import Contest, ContestDetails, ContestPhase, NewContest
+from app.contest.model import Contest, ContestDetails, ContestPhase, ContestRound, NewContest
 from app.core.clock import Clock
 from app.core.db import Database
 
@@ -102,3 +102,34 @@ async def find_contest(session: AsyncSession, contest_id: ContestId) -> Contest:
     if contest is None:
         raise ContestNotFoundError("Конкурс не найден.")
     return contest
+
+
+async def list_unfinalized_contest_ids(session: AsyncSession, now: datetime) -> list[ContestId]:
+    """Конкурсы, ожидающие финализации: голосование закрыто, итог не зафиксирован."""
+    return await dao.select_unfinalized_contest_ids(session, now)
+
+
+async def lock_contest_for_finalization(session: AsyncSession, contest_id: ContestId) -> Contest:
+    """`FOR UPDATE`: финализация дожидается всех записей, начатых до дедлайна (Р6)."""
+    contest = await dao.select_contest(session, contest_id, lock_for_update=True)
+    if contest is None:
+        raise ContestNotFoundError("Конкурс не найден.")
+    return contest
+
+
+async def record_finalization(
+    session: AsyncSession, contest_id: ContestId, *, now: datetime, winner: IdeaId | None
+) -> bool:
+    """Зафиксировать итог; `False`, если он уже зафиксирован (повторный тик — no-op)."""
+    return await dao.update_contest_finalization(
+        session, contest_id, finalized_at=now, winner=winner
+    )
+
+
+async def list_contests_in_reminder_window(
+    session: AsyncSession, contest_round: ContestRound, now: datetime, lead_time: timedelta
+) -> list[Contest]:
+    """Конкурсы, у которых дедлайн раунда в окне `deadline − lead_time ≤ now < deadline`."""
+    return await dao.select_contests_with_deadline_between(
+        session, contest_round, now, now + lead_time
+    )

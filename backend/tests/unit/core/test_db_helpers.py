@@ -54,7 +54,7 @@ def test_constraint_auth_and_logic_errors_are_not_unavailability(error: BaseExce
 
 
 def test_expected_revision_is_the_only_head() -> None:
-    assert expected_schema_revision() == "0005"
+    assert expected_schema_revision() == "0007"
 
 
 def test_matching_revision_has_no_message() -> None:
