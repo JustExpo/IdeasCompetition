@@ -28,6 +28,7 @@ from app.idea.model import (
     SubmittedIdea,
     can_view_idea,
     compute_request_hash,
+    ensure_can_delete_idea,
     ensure_can_edit_idea,
     ensure_can_submit_idea,
 )
@@ -130,6 +131,46 @@ async def edit_idea(
         return await dao.update_idea_content(session, idea_id, content, now)
 
     return await database.run_in_transaction(work)
+
+
+async def delete_idea(database: Database, clock: Clock, actor: Actor, idea_id: IdeaId) -> None:
+    """Удалить свою идею вместе с голосами, пока конкурс не завершён (П11).
+
+    Порядок блокировок тот же, что при правке и голосовании: contest → idea (Р6). Голос,
+    ожидающий на блокировке идеи, после удаления получает 404, «сирот» не остаётся.
+    """
+
+    async def work(session: AsyncSession) -> None:
+        ensure_actor_active(actor)
+        contest_id = await dao.select_idea_contest_id(session, idea_id)
+        if contest_id is None:
+            raise IdeaNotFoundError("Идея не найдена.")
+        contest = await contest_service.lock_contest_for_share(session, contest_id)
+        idea = await dao.select_idea(session, idea_id, lock_for_update=True)
+        if idea is None:
+            raise IdeaNotFoundError("Идея не найдена.")
+        ensure_can_delete_idea(actor, idea, contest.phase_at(clock.now()))
+        await dao.delete_idea(session, idea_id)
+
+    await database.run_in_transaction(work)
+
+
+async def list_all_contest_ideas(session: AsyncSession, contest_id: ContestId) -> tuple[Idea, ...]:
+    """Все идеи конкурса без проверки видимости: для подсчёта итогов (вызывает `result`).
+
+    Кто вправе видеть итоги, решает вызывающий сервис по политике `result.model`.
+    """
+    return tuple(await dao.select_contest_ideas(session, contest_id))
+
+
+async def find_idea_contest_id(session: AsyncSession, idea_id: IdeaId) -> ContestId | None:
+    """Конкурс идеи без блокировок: вызывающий сначала блокирует конкурс (contest → idea)."""
+    return await dao.select_idea_contest_id(session, idea_id)
+
+
+async def lock_idea_for_share(session: AsyncSession, idea_id: IdeaId) -> Idea | None:
+    """Идея под `FOR SHARE`: голоса не мешают друг другу, но удаление идеи дожидается их (Р6)."""
+    return await dao.select_idea(session, idea_id, lock_for_share=True)
 
 
 async def list_contest_ideas(

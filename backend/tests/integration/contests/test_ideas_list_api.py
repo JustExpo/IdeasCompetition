@@ -21,7 +21,7 @@ NewContest = Callable[..., Awaitable[int]]
 NewIdea = Callable[..., Awaitable[httpx.Response]]
 
 OWN_KEYS = {"id", "title", "description", "version", "submitted_at", "updated_at"}
-VOTING_KEYS = {"id", "title", "description", "is_mine"}
+VOTING_KEYS = {"id", "title", "description", "is_mine", "my_vote"}
 FINISHED_KEYS = {"id", "title", "description", "is_mine", "author_name", "submitted_at"}
 
 

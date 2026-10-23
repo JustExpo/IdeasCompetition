@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -91,11 +91,17 @@ async def select_idea_contest_id(session: AsyncSession, idea_id: IdeaId) -> Cont
 
 
 async def select_idea(
-    session: AsyncSession, idea_id: IdeaId, *, lock_for_update: bool = False
+    session: AsyncSession,
+    idea_id: IdeaId,
+    *,
+    lock_for_update: bool = False,
+    lock_for_share: bool = False,
 ) -> Idea | None:
     statement = select(IdeaRow).where(IdeaRow.id == idea_id)
     if lock_for_update:
         statement = statement.with_for_update().execution_options(populate_existing=True)
+    elif lock_for_share:
+        statement = statement.with_for_update(read=True).execution_options(populate_existing=True)
     row = (await session.execute(statement)).scalar_one_or_none()
     return None if row is None else _to_idea(row)
 
@@ -133,3 +139,8 @@ async def select_contest_ideas(
         statement = statement.where(IdeaRow.author_id == author_id)
     statement = statement.order_by(IdeaRow.id if order_by_id else IdeaRow.submitted_at, IdeaRow.id)
     return [_to_idea(row) for row in (await session.execute(statement)).scalars()]
+
+
+async def delete_idea(session: AsyncSession, idea_id: IdeaId) -> None:
+    """Удалить идею; её голоса уходят каскадом на уровне БД (П11)."""
+    await session.execute(delete(IdeaRow).where(IdeaRow.id == idea_id))

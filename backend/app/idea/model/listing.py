@@ -14,6 +14,8 @@ class ListedIdea:
     idea: Idea
     is_mine: bool
     author_name: str | None = field(default=None, repr=False)
+    # Голос текущего пользователя: заполняет `vote` в фазе голосования.
+    my_vote: bool = False
 
 
 @dataclass(frozen=True, slots=True)

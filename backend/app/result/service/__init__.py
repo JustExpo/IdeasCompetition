@@ -1,1 +1,5 @@
-"""result.service — сценарии: транзакции, проверки прав и фаз, публикация событий."""
+"""result.service — сценарии итогов."""
+
+from app.result.service.results import get_results
+
+__all__ = ["get_results"]

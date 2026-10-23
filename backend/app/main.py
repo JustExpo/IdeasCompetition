@@ -26,6 +26,7 @@ from app.core.middleware import (
 from app.core.singleton import SingletonLock
 from app.core.spa import install_spa
 from app.idea.controller import router as idea_router
+from app.result.controller import router as result_router
 from app.vote.controller import router as vote_router
 
 _log = get_logger(__name__)
@@ -89,6 +90,7 @@ def create_app(
     app.include_router(contest_router)
     app.include_router(idea_router)
     app.include_router(vote_router)
+    app.include_router(result_router)
     ensure_routes_have_policy(app)
     if spa_dir is not None:
         install_spa(app, spa_dir)  # последним: catch-all не должен перекрывать маршруты /api

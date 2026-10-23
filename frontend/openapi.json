@@ -196,6 +196,34 @@
         "title": "CreateContestRequest",
         "type": "object"
       },
+      "DashboardResponse": {
+        "additionalProperties": false,
+        "description": "Экран организатора (Ф5): числа и текущие места; авторов нет и после финала.",
+        "properties": {
+          "ideas_count": {
+            "title": "Ideas Count",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ResultItem"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "voters_count": {
+            "title": "Voters Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ideas_count",
+          "voters_count",
+          "results"
+        ],
+        "title": "DashboardResponse",
+        "type": "object"
+      },
       "EditIdeaRequest": {
         "additionalProperties": false,
         "properties": {
@@ -223,6 +251,65 @@
           "version"
         ],
         "title": "EditIdeaRequest",
+        "type": "object"
+      },
+      "FinalResultItem": {
+        "additionalProperties": false,
+        "description": "Место идеи после финала: автор раскрыт.",
+        "properties": {
+          "author_name": {
+            "title": "Author Name",
+            "type": "string"
+          },
+          "idea_id": {
+            "format": "uuid",
+            "title": "Idea Id",
+            "type": "string"
+          },
+          "place": {
+            "title": "Place",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "votes": {
+            "title": "Votes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "place",
+          "idea_id",
+          "title",
+          "votes",
+          "author_name"
+        ],
+        "title": "FinalResultItem",
+        "type": "object"
+      },
+      "FinalResultsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/FinalResultItem"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "status": {
+            "const": "final",
+            "default": "final",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "FinalResultsResponse",
         "type": "object"
       },
       "FinishedIdeaItem": {
@@ -351,6 +438,29 @@
         "title": "IdeaResponse",
         "type": "object"
       },
+      "InProgressResultsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ResultItem"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "status": {
+            "const": "in_progress",
+            "default": "in_progress",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "InProgressResultsResponse",
+        "type": "object"
+      },
       "LoginRequest": {
         "additionalProperties": false,
         "properties": {
@@ -445,6 +555,37 @@
           "password"
         ],
         "title": "RegisterRequest",
+        "type": "object"
+      },
+      "ResultItem": {
+        "additionalProperties": false,
+        "description": "Место идеи без автора: так итоги видит организатор до финала.",
+        "properties": {
+          "idea_id": {
+            "format": "uuid",
+            "title": "Idea Id",
+            "type": "string"
+          },
+          "place": {
+            "title": "Place",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "votes": {
+            "title": "Votes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "place",
+          "idea_id",
+          "title",
+          "votes"
+        ],
+        "title": "ResultItem",
         "type": "object"
       },
       "SubmissionIdeasResponse": {
@@ -586,6 +727,10 @@
             "title": "Is Mine",
             "type": "boolean"
           },
+          "my_vote": {
+            "title": "My Vote",
+            "type": "boolean"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -595,7 +740,8 @@
           "id",
           "title",
           "description",
-          "is_mine"
+          "is_mine",
+          "my_vote"
         ],
         "title": "VotingIdeaItem",
         "type": "object"
@@ -996,6 +1142,63 @@
         ]
       }
     },
+    "/api/contests/{contest_id}/results": {
+      "get": {
+        "operationId": "get_contest_results_api_contests__contest_id__results_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contest_id",
+            "required": true,
+            "schema": {
+              "title": "Contest Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "final": "#/components/schemas/FinalResultsResponse",
+                      "in_progress": "#/components/schemas/InProgressResultsResponse"
+                    },
+                    "propertyName": "status"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/InProgressResultsResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FinalResultsResponse"
+                    }
+                  ],
+                  "title": "Response Get Contest Results Api Contests  Contest Id  Results Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Contest Results",
+        "tags": [
+          "results"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "get_health_api_health_get",
@@ -1019,6 +1222,40 @@
       }
     },
     "/api/ideas/{idea_id}": {
+      "delete": {
+        "operationId": "delete_idea_api_ideas__idea_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idea_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Idea Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Idea",
+        "tags": [
+          "ideas"
+        ]
+      },
       "patch": {
         "operationId": "patch_idea_api_ideas__idea_id__patch",
         "parameters": [
@@ -1068,6 +1305,118 @@
         "summary": "Patch Idea",
         "tags": [
           "ideas"
+        ]
+      }
+    },
+    "/api/ideas/{idea_id}/vote": {
+      "delete": {
+        "operationId": "delete_vote_api_ideas__idea_id__vote_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idea_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Idea Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Vote",
+        "tags": [
+          "ideas"
+        ]
+      },
+      "put": {
+        "operationId": "put_vote_api_ideas__idea_id__vote_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "idea_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Idea Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Vote",
+        "tags": [
+          "ideas"
+        ]
+      }
+    },
+    "/api/organizer/contests/{contest_id}/dashboard": {
+      "get": {
+        "operationId": "get_dashboard_api_organizer_contests__contest_id__dashboard_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contest_id",
+            "required": true,
+            "schema": {
+              "title": "Contest Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dashboard",
+        "tags": [
+          "results"
         ]
       }
     }
