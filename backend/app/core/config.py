@@ -96,9 +96,31 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> tuple[str, ...]:
         """Источники, которым разрешены небезопасные методы и WebSocket (CLAUDE.md §9.3)."""
+        origins = [self.public_origin]
+        twin = self.loopback_twin_origin
+        if twin is not None and self.app_env in ("dev", "e2e"):
+            origins.append(twin)
         if self.app_env == "dev":
-            return (self.public_origin, DEV_FRONTEND_ORIGIN)
-        return (self.public_origin,)
+            origins.append(DEV_FRONTEND_ORIGIN)
+        return tuple(origins)
+
+    @property
+    def loopback_twin_origin(self) -> str | None:
+        """Тот же адрес под вторым именем локальной машины: 127.0.0.1 ↔ localhost.
+
+        Браузер считает их разными источниками, а человек вводит любое; без двойника
+        `http://localhost:8000` получал бы 403 на все записи и WebSocket. Только http и
+        только петля: чужой хост этим не открывается.
+        """
+        parts = urlsplit(self.public_base_url)
+        if parts.scheme != "http":
+            return None
+        twins = {"127.0.0.1": "localhost", "localhost": "127.0.0.1"}
+        twin = twins.get(parts.hostname or "")
+        if twin is None:
+            return None
+        port = f":{parts.port}" if parts.port else ""
+        return f"http://{twin}{port}"
 
 
 def collect_environment_problems(settings: Settings) -> list[str]:

@@ -266,9 +266,47 @@ def test_allowed_origins_include_vite_dev_server_only_in_dev(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     dev = build(monkeypatch)
-    assert dev.allowed_origins == ("http://127.0.0.1:8000", DEV_FRONTEND_ORIGIN)
+    assert DEV_FRONTEND_ORIGIN in dev.allowed_origins
+    e2e = build(monkeypatch, APP_ENV="e2e", DATABASE_URL="postgresql+asyncpg://u:p@db/ideas_e2e")
+    assert DEV_FRONTEND_ORIGIN not in e2e.allowed_origins
     prod = build(monkeypatch, **PROD, ORGANIZER_PASSWORD="x" * 16)
     assert prod.allowed_origins == ("https://ideas.example.com",)
+
+
+E2E_DB = "postgresql+asyncpg://u:p@db/ideas_e2e"
+
+
+def test_allowed_origins_dev_has_loopback_twin_and_vite(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = build(monkeypatch)
+    assert settings.allowed_origins == (
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+        DEV_FRONTEND_ORIGIN,
+    )
+
+
+def test_allowed_origins_dev_twin_works_both_ways(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = build(monkeypatch, PUBLIC_BASE_URL="http://localhost:9000")
+    assert settings.allowed_origins[:2] == ("http://localhost:9000", "http://127.0.0.1:9000")
+
+
+def test_allowed_origins_e2e_has_twin_without_vite(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = build(monkeypatch, APP_ENV="e2e", DATABASE_URL=E2E_DB)
+    assert settings.allowed_origins == ("http://127.0.0.1:8000", "http://localhost:8000")
+
+
+def test_allowed_origins_prod_has_only_own_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+    prod = build(monkeypatch, **PROD, ORGANIZER_PASSWORD="x" * 16)
+    assert prod.loopback_twin_origin is None
+    assert prod.allowed_origins == ("https://ideas.example.com",)
+
+
+def test_allowed_origins_never_include_twin_for_foreign_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = build(monkeypatch, PUBLIC_BASE_URL="http://ideas.corp.example:8000")
+    assert settings.loopback_twin_origin is None
+    assert "http://localhost:8000" not in settings.allowed_origins
 
 
 def test_all_problems_are_reported_and_exit_code_is_2_without_secret_values(
