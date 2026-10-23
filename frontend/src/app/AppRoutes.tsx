@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router-dom";
 
 import { RequireAuth } from "../features/auth";
 import { AppShell } from "../pages/AppShell";
+import { ContestPage } from "../pages/ContestPage";
 import { ContestsPage } from "../pages/ContestsPage";
 import { LoginPage } from "../pages/LoginPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
@@ -15,6 +16,7 @@ export function AppRoutes() {
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
           <Route index element={<ContestsPage />} />
+          <Route path="contests/:contestId" element={<ContestPage />} />
         </Route>
       </Route>
       <Route path="*" element={<NotFoundPage />} />

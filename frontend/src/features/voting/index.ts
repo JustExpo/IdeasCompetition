@@ -1,0 +1,1 @@
+export { VotingList } from "./VotingList";
