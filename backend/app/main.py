@@ -3,6 +3,7 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from functools import partial
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -23,10 +24,15 @@ from app.core.middleware import (
     OriginGuardMiddleware,
     RequestContextMiddleware,
 )
+from app.core.scheduler import ScheduledJob, Scheduler
 from app.core.singleton import SingletonLock
 from app.core.spa import install_spa
 from app.idea.controller import router as idea_router
+from app.notification.handler import run_email_delivery
+from app.notification.service import EmailSender, SmtpEmailSender
+from app.reminder.handler import run_reminders
 from app.result.controller import router as result_router
+from app.result.handler import run_finalization
 from app.vote.controller import router as vote_router
 
 _log = get_logger(__name__)
@@ -41,16 +47,46 @@ def create_app(
     limiter: AttemptLimiter | None = None,
     bootstrap_organizer: bool = False,
     spa_dir: Path | None = None,
+    email_sender: EmailSender | None = None,
 ) -> FastAPI:
     """`database`, `clock`, `passwords` подменяются в тестах; по умолчанию создаются из настроек
     (без подключения к БД). `singleton` и `bootstrap_organizer` передаёт лаунчер: `/api/health`
     отвечает 503, если блокировка потеряна, а организатор из окружения создаётся при старте.
     `spa_dir` — каталог собранного SPA (`frontend/dist`); без него статика не раздаётся
-    (тесты, экспорт OpenAPI)."""
+    (тесты, экспорт OpenAPI). `email_sender` — почтовый адаптер; по умолчанию SMTP из настроек."""
     database = database or Database(settings.database_url.get_secret_value())
     clock = clock or SystemClock()
     passwords = passwords or PasswordService()
     limiter = limiter or AttemptLimiter(per_ip_enabled=settings.rate_limit_per_ip_enabled)
+
+    sender = email_sender or SmtpEmailSender(
+        settings.smtp_host, settings.smtp_port, str(settings.mail_from)
+    )
+    # Порядок задач не важен: каждая идемпотентна. Письма отправляются последними, чтобы
+    # итоговые письма и напоминания, поставленные в этом же тике, ушли без ожидания следующего.
+    scheduler = Scheduler(
+        database,
+        [
+            ScheduledJob(
+                "finalization",
+                partial(
+                    run_finalization, database, clock, public_base_url=settings.public_base_url
+                ),
+            ),
+            ScheduledJob(
+                "reminders",
+                partial(
+                    run_reminders,
+                    database,
+                    clock,
+                    public_base_url=settings.public_base_url,
+                    display_tz=settings.display_tz,
+                ),
+            ),
+            ScheduledJob("email_delivery", partial(run_email_delivery, database, clock, sender)),
+        ],
+        settings.scheduler_interval_s,
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -64,7 +100,10 @@ def create_app(
                 password=settings.organizer_password.get_secret_value(),
             )
             _log.info("organizer_ready", created=ensured.created, user_id=int(ensured.user.id))
+        if settings.run_scheduler:
+            scheduler.start()
         yield
+        await scheduler.stop()
         await database.dispose()
 
     # Swagger UI и ReDoc отключены: они тянут скрипты с CDN, а контракт берётся из app.openapi().
@@ -82,6 +121,7 @@ def create_app(
     app.state.clock = clock
     app.state.passwords = passwords
     app.state.limiter = limiter
+    app.state.scheduler = scheduler
     app.state.actor_resolver = resolve_request_actor
 
     install_error_handlers(app)

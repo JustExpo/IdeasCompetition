@@ -5,6 +5,9 @@ from app.contest.dao.repository import (
     insert_contest,
     select_contest,
     select_contests_page,
+    select_contests_with_deadline_between,
+    select_unfinalized_contest_ids,
+    update_contest_finalization,
 )
 from app.contest.dao.tables import ContestRow
 
@@ -14,4 +17,7 @@ __all__ = [
     "insert_contest",
     "select_contest",
     "select_contests_page",
+    "select_contests_with_deadline_between",
+    "select_unfinalized_contest_ids",
+    "update_contest_finalization",
 ]

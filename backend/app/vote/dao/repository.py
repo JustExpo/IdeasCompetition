@@ -68,3 +68,15 @@ async def count_voters(session: AsyncSession, idea_ids: Collection[IdeaId]) -> i
         VoteRow.idea_id.in_(idea_ids)
     )
     return int(await session.scalar(statement) or 0)
+
+
+async def select_voter_ids(
+    session: AsyncSession, idea_ids: Collection[IdeaId]
+) -> frozenset[UserId]:
+    """Кто сейчас голосует за идеи из `idea_ids` (получатели итоговых писем)."""
+    if not idea_ids:
+        return frozenset()
+    rows = await session.scalars(
+        select(func.distinct(VoteRow.voter_id)).where(VoteRow.idea_id.in_(idea_ids))
+    )
+    return frozenset(UserId(value) for value in rows)

@@ -6,6 +6,7 @@ from app.vote.dao.repository import (
     delete_vote,
     insert_vote_if_absent,
     select_voted_idea_ids,
+    select_voter_ids,
 )
 from app.vote.dao.tables import VoteRow
 
@@ -16,4 +17,5 @@ __all__ = [
     "delete_vote",
     "insert_vote_if_absent",
     "select_voted_idea_ids",
+    "select_voter_ids",
 ]
