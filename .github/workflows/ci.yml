@@ -79,8 +79,11 @@ jobs:
         run: uv run alembic downgrade -1
       - name: Миграции вверх повторно
         run: uv run alembic upgrade head
-      - name: integration-тесты
-        run: uv run pytest -m integration
+      - name: Все тесты с покрытием веток
+        run: uv run pytest --cov --cov-report=term --cov-report=json:coverage.json
+      - name: Покрытие app/*/model и app/auth не ниже 95 %
+        working-directory: .
+        run: python3 scripts/check_coverage.py backend/coverage.json
 
   frontend:
     name: frontend (prettier, eslint, tsc, depcruise, vitest, build)
@@ -136,9 +139,15 @@ jobs:
   docker:
     name: docker (образ, compose, один контейнер)
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Зависимости backend (для проверки локального сервера в check_singleton.sh)
+        run: (cd backend && uv sync --frozen)
       - name: make up
         run: make up
       - name: /api/health = 200
@@ -166,6 +175,8 @@ jobs:
           test "$first" = "$second"
       - name: Контейнеров приложения ровно один
         run: test "$(docker ps -q --filter label=org.ideas-competition.role=app | wc -l)" = 1
+      - name: Инвариант одного контейнера (scripts/check_singleton.sh)
+        run: ./scripts/check_singleton.sh
       - name: Лог приложения при падении
         if: failure()
         run: docker compose logs --no-color
@@ -174,6 +185,41 @@ jobs:
         run: |
           make down
           docker volume inspect ideas-competition_pgdata > /dev/null
+
+  e2e:
+    name: e2e (Playwright, два браузерных контекста, Mailpit)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Зависимости e2e и браузер
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: npm audit (e2e)
+        working-directory: e2e
+        run: npm audit --audit-level=high
+      - name: make e2e
+        run: make e2e
+      - name: Артефакты при падении
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-traces
+          path: e2e/test-results
+          if-no-files-found: ignore
+      - name: Лог контейнеров при падении
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Вернуть режим dev и остановить
+        if: always()
+        run: make down
 
   security:
     name: security (pip-audit, gitleaks)

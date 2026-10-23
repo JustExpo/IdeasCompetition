@@ -414,3 +414,23 @@ forbidden_modules =
     app.reminder
     app.notification
     app.realtime
+
+[importlinter:contract:test-clock-only-in-main]
+name = app.core.testing (тестовые часы e2e) подключает только app.main
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    app.common
+    app.core
+    app.cli
+    app.user
+    app.auth
+    app.contest
+    app.idea
+    app.vote
+    app.result
+    app.reminder
+    app.notification
+    app.realtime
+forbidden_modules =
+    app.core.testing

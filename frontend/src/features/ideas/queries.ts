@@ -1,6 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { ApiError, deleteIdea, editIdea, listIdeas, submitIdea, type IdeaDraft } from "../../api";
+import {
+  ApiError,
+  deleteIdea,
+  describeError,
+  editIdea,
+  listIdeas,
+  submitIdea,
+  type IdeaDraft,
+} from "../../api";
+import { reportLateAction } from "../../shared/lib/lateAction";
 import { contestScope, ideasKey } from "../../shared/lib/queryKeys";
 
 /** Список идей конкурса в том виде, в каком его вправе видеть текущий пользователь (по фазе). */
@@ -29,6 +38,7 @@ export function useSubmitIdea(contestId: number) {
     },
     onError: async (error) => {
       if (isSubmissionClosed(error)) {
+        reportLateAction(describeError(error).message);
         await queryClient.invalidateQueries({ queryKey: contestScope(contestId) });
       }
     },
@@ -43,6 +53,9 @@ export function useEditIdea(contestId: number) {
     // Список перечитывается и при ошибке: после `stale_version` в нём уже новая версия идеи,
     // и повторное сохранение осознанно перезапишет её текстом из формы.
     onSettled: async (_data, error) => {
+      if (isSubmissionClosed(error)) {
+        reportLateAction(describeError(error).message);
+      }
       await queryClient.invalidateQueries({
         queryKey: isSubmissionClosed(error) ? contestScope(contestId) : ideasKey(contestId),
       });

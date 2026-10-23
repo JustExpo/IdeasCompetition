@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     smtp_port: int = Field(ge=1, le=65535)
     mail_from: EmailStr
     display_tz: str = "Europe/Moscow"
+    # Идентификатор сборки (git sha); уходит в `X-App-Build` и приветствие WebSocket, чтобы
+    # открытая вкладка со старым SPA предложила обновить страницу (CLAUDE.md §8.1).
+    app_build: str = Field(default="dev", pattern=r"^[A-Za-z0-9._-]{1,64}$")
     scheduler_interval_s: int = Field(default=15, ge=5, le=300)
     web_concurrency: int = 1
     run_scheduler: bool = True

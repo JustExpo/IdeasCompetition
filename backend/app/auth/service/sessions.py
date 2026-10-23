@@ -17,6 +17,7 @@ from app.common.model import PASSWORD_MAX_LENGTH, normalize_password
 from app.core.clock import Clock
 from app.core.db import Database
 from app.core.logging import get_logger
+from app.realtime.service import NULL_EVENT_PUBLISHER, EventPublisher
 from app.user import service as user_service
 from app.user.model import User
 
@@ -147,13 +148,20 @@ async def resolve_actor(database: Database, clock: Clock, token: str) -> Actor |
     return await database.run_in_transaction(work)
 
 
-async def log_out(database: Database, clock: Clock, token: str) -> None:
-    """Отозвать сессию по токену; повторный выход безопасен."""
+async def log_out(
+    database: Database,
+    clock: Clock,
+    token: str,
+    events: EventPublisher = NULL_EVENT_PUBLISHER,
+) -> None:
+    """Отозвать сессию по токену (повторный выход безопасен) и закрыть её WebSocket."""
+    token_hash = hash_session_token(token)
 
     async def work(session: AsyncSession) -> None:
-        await dao.revoke_session(session, hash_session_token(token), clock.now())
+        await dao.revoke_session(session, token_hash, clock.now())
 
     await database.run_in_transaction(work)
+    events.revoke_session(token_hash)
 
 
 async def get_current_user(database: Database, actor: Actor) -> User:

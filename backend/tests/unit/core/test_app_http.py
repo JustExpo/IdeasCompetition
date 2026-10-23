@@ -19,6 +19,7 @@ from app.core.access import (
     RequirePolicy,
     RoutePolicyError,
     ensure_routes_have_policy,
+    list_api_paths,
     require,
 )
 from app.core.config import Settings
@@ -317,8 +318,22 @@ def bare_app() -> FastAPI:
     return FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
 
 
-def test_create_app_passes_its_own_route_check(app: FastAPI) -> None:
-    ensure_routes_have_policy(app)
+def test_create_app_passes_its_own_route_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    apply_env(monkeypatch, base_env())
+    real_app = create_app(Settings(), database=ReadyDatabase(DB_URL))
+
+    ensure_routes_have_policy(real_app)
+
+    # Проверка обязана видеть маршруты подключённых роутеров, иначе она ничего не проверяет.
+    seen = list_api_paths(real_app)
+    assert {
+        "/api/health",
+        "/api/auth/login",
+        "/api/contests",
+        "/api/ideas/{idea_id}/vote",
+        "/api/organizer/contests/{contest_id}/dashboard",
+        "/api/contests/{contest_id}/events",
+    } <= seen
 
 
 def test_route_without_policy_fails_with_its_path(bare_app: FastAPI) -> None:
@@ -346,6 +361,76 @@ def test_policy_set_on_router_counts_for_its_routes(bare_app: FastAPI) -> None:
     bare_app.include_router(router)
 
     ensure_routes_have_policy(bare_app)
+
+
+def test_regression_route_of_included_router_without_policy_fails(bare_app: FastAPI) -> None:
+    # FastAPI 0.15x прячет маршруты подключённых роутеров за обёрткой; проверка, смотревшая
+    # только на `app.routes`, молча пропускала их все (default deny не работал).
+    router = APIRouter()
+
+    @router.get("/api/forgotten-in-router")
+    async def forgotten() -> None: ...
+
+    bare_app.include_router(router)
+
+    with pytest.raises(RoutePolicyError, match="/api/forgotten-in-router"):
+        ensure_routes_have_policy(bare_app)
+
+
+def test_regression_public_route_of_included_router_outside_allow_list_fails(
+    bare_app: FastAPI,
+) -> None:
+    router = APIRouter()
+
+    @router.get("/api/leaked", dependencies=[require(Policy.PUBLIC)])
+    async def leaked() -> None: ...
+
+    bare_app.include_router(router)
+
+    with pytest.raises(RoutePolicyError, match="allow-list"):
+        ensure_routes_have_policy(bare_app)
+
+
+def test_policy_given_at_include_time_counts(bare_app: FastAPI) -> None:
+    router = APIRouter()
+
+    @router.get("/api/guarded")
+    async def guarded() -> None: ...
+
+    bare_app.include_router(router, dependencies=[require(Policy.EMPLOYEE)])
+
+    ensure_routes_have_policy(bare_app)
+
+
+def test_websocket_of_included_router_needs_a_policy(bare_app: FastAPI) -> None:
+    router = APIRouter()
+
+    @router.websocket("/api/contests/1/live")
+    async def live() -> None: ...
+
+    bare_app.include_router(router)
+    with pytest.raises(RoutePolicyError, match="/api/contests/1/live"):
+        ensure_routes_have_policy(bare_app)
+
+
+def test_websocket_policy_given_at_include_time_counts(bare_app: FastAPI) -> None:
+    router = APIRouter()
+
+    @router.websocket("/api/contests/1/live")
+    async def live() -> None: ...
+
+    bare_app.include_router(router, dependencies=[require(Policy.AUTHENTICATED)])
+
+    ensure_routes_have_policy(bare_app)
+
+
+def test_plain_route_added_to_included_router_fails(bare_app: FastAPI) -> None:
+    router = APIRouter()
+    router.routes.append(Route("/api/plain-in-router", lambda request: None))
+    bare_app.include_router(router)
+
+    with pytest.raises(RoutePolicyError, match="/api/plain-in-router"):
+        ensure_routes_have_policy(bare_app)
 
 
 def test_routes_outside_api_need_no_policy(bare_app: FastAPI) -> None:

@@ -24,6 +24,8 @@ from app.core.http_errors import REQUEST_ID_HEADER, build_problem
 from app.core.logging import bind_log_context, clear_log_context, get_logger
 
 MAX_BODY_BYTES = 64 * 1024
+BUILD_HEADER = "X-App-Build"
+MODE_HEADER = "X-App-Mode"  # только в режиме e2e; в dev и prod заголовка нет
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # CSP из CLAUDE.md §9.3: SPA грузит только свои скрипты и стили и ходит только на свой origin.
 CONTENT_SECURITY_POLICY = (
@@ -47,8 +49,10 @@ def _request_id_from_scope(scope: Scope) -> str:
 class RequestContextMiddleware:
     """`X-Request-ID`, контекст логов, заголовки безопасности, `no-store` и запись о запросе."""
 
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(self, app: ASGIApp, build: str = "dev", mode: str = "dev") -> None:
         self.app = app
+        self.build = build
+        self.mode = mode
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -67,6 +71,9 @@ class RequestContextMiddleware:
                 status = message["status"]
                 headers = MutableHeaders(scope=message)
                 headers[REQUEST_ID_HEADER] = request_id
+                headers[BUILD_HEADER] = self.build
+                if self.mode == "e2e":
+                    headers[MODE_HEADER] = "e2e"  # SPA рисует плашку «E2E MODE»
                 headers["X-Content-Type-Options"] = "nosniff"
                 headers["Referrer-Policy"] = "no-referrer"
                 headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY

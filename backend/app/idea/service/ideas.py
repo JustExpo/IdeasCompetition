@@ -31,7 +31,9 @@ from app.idea.model import (
     ensure_can_delete_idea,
     ensure_can_edit_idea,
     ensure_can_submit_idea,
+    plan_idea_events,
 )
+from app.realtime.service import NULL_EVENT_PUBLISHER, EventPublisher
 from app.user import service as user_service
 
 
@@ -43,6 +45,14 @@ def _replay(stored: tuple[Idea, bytes | None], request_hash: bytes) -> Submitted
     return SubmittedIdea(idea, created=False)
 
 
+def _publish_idea_events(
+    events: EventPublisher, contest_id: ContestId, idea: Idea, phase: ContestPhase, *, deleted: bool
+) -> None:
+    """Вызывается только после commit: откат транзакции событий не порождает (§4.3)."""
+    for planned in plan_idea_events(contest_id, idea, phase, deleted=deleted):
+        events.publish(planned)
+
+
 async def submit_idea(
     database: Database,
     clock: Clock,
@@ -52,22 +62,24 @@ async def submit_idea(
     client_request_id: UUID,
     title: str,
     description: str,
+    events: EventPublisher = NULL_EVENT_PUBLISHER,
 ) -> SubmittedIdea:
     """Подать идею. Порядок шагов — §7.2; `now` читается после блокировки конкурса (Р4)."""
     # Ввод проверяется до транзакции: неверный запрос не занимает соединение с БД.
     content = IdeaContent.create(title, description)
     request_hash = compute_request_hash(contest_id, content)
 
-    async def work(session: AsyncSession) -> SubmittedIdea:
+    async def work(session: AsyncSession) -> tuple[SubmittedIdea, ContestPhase]:
         ensure_actor_active(actor)
         # Повтор ищем ДО проверки фазы: ответ на запрос, принятый перед дедлайном, но потерянный
         # по сети, при повторе после дедлайна должен вернуть принятую идею, а не 409 (П2).
         stored = await dao.select_idea_by_request(session, actor.user_id, client_request_id)
         if stored is not None:
-            return _replay(stored, request_hash)
+            return _replay(stored, request_hash), ContestPhase.SUBMISSION
         contest = await contest_service.lock_contest_for_share(session, contest_id)
         now = clock.now()
-        ensure_can_submit_idea(actor, contest.phase_at(now))
+        phase = contest.phase_at(now)
+        ensure_can_submit_idea(actor, phase)
         # Лимиты мягкие: параллельные вставки под общей блокировкой могут превысить их на единицы,
         # корректность итога это не нарушает (§7.2).
         if await dao.count_author_ideas(session, contest_id, actor.user_id) >= (
@@ -86,14 +98,18 @@ async def submit_idea(
             now=now,
         )
         if idea is not None:
-            return SubmittedIdea(idea, created=True)
+            return SubmittedIdea(idea, created=True), phase
         # Параллельный запрос с тем же ключом закоммитился раньше: это повтор.
         stored = await dao.select_idea_by_request(session, actor.user_id, client_request_id)
         if stored is None:  # недостижимо: конфликт возможен только по этому ключу
             raise RuntimeError("идея не найдена после конфликта ключа повтора")
-        return _replay(stored, request_hash)
+        return _replay(stored, request_hash), phase
 
-    return await database.run_in_transaction(work)
+    submitted, phase = await database.run_in_transaction(work)
+    # Повтор принятого запроса ничего не меняет, поэтому вкладкам сигнал не нужен.
+    if submitted.created:
+        _publish_idea_events(events, contest_id, submitted.idea, phase, deleted=False)
+    return submitted
 
 
 async def edit_idea(
@@ -105,11 +121,12 @@ async def edit_idea(
     title: str,
     description: str,
     version: int,
+    events: EventPublisher = NULL_EVENT_PUBLISHER,
 ) -> Idea:
     """Править свою идею до закрытия приёма. Порядок блокировок contest → idea (Р6)."""
     content = IdeaContent.create(title, description)
 
-    async def work(session: AsyncSession) -> Idea:
+    async def work(session: AsyncSession) -> tuple[Idea, ContestId, ContestPhase | None]:
         ensure_actor_active(actor)
         # Конкурс идеи нужно знать до блокировок: сначала contest, потом idea.
         contest_id = await dao.select_idea_contest_id(session, idea_id)
@@ -123,24 +140,35 @@ async def edit_idea(
         # Те же поля — повтор уже применённой правки (ответ мог потеряться по сети): 200 в любой
         # фазе и при любой версии, проверка идёт до фазы и версии.
         if idea.content == content:
-            return idea
+            return idea, contest_id, None
         now = clock.now()
-        ensure_can_edit_idea(actor, idea, contest.phase_at(now))
+        phase = contest.phase_at(now)
+        ensure_can_edit_idea(actor, idea, phase)
         if idea.version != version:
             raise StaleIdeaVersionError("Идею уже изменили в другой вкладке.")
-        return await dao.update_idea_content(session, idea_id, content, now)
+        updated = await dao.update_idea_content(session, idea_id, content, now)
+        return updated, contest_id, phase
 
-    return await database.run_in_transaction(work)
+    idea, contest_id, phase = await database.run_in_transaction(work)
+    if phase is not None:  # None — повтор уже применённой правки
+        _publish_idea_events(events, contest_id, idea, phase, deleted=False)
+    return idea
 
 
-async def delete_idea(database: Database, clock: Clock, actor: Actor, idea_id: IdeaId) -> None:
+async def delete_idea(
+    database: Database,
+    clock: Clock,
+    actor: Actor,
+    idea_id: IdeaId,
+    events: EventPublisher = NULL_EVENT_PUBLISHER,
+) -> None:
     """Удалить свою идею вместе с голосами, пока конкурс не завершён (П11).
 
     Порядок блокировок тот же, что при правке и голосовании: contest → idea (Р6). Голос,
     ожидающий на блокировке идеи, после удаления получает 404, «сирот» не остаётся.
     """
 
-    async def work(session: AsyncSession) -> None:
+    async def work(session: AsyncSession) -> tuple[ContestId, Idea, ContestPhase]:
         ensure_actor_active(actor)
         contest_id = await dao.select_idea_contest_id(session, idea_id)
         if contest_id is None:
@@ -149,10 +177,13 @@ async def delete_idea(database: Database, clock: Clock, actor: Actor, idea_id: I
         idea = await dao.select_idea(session, idea_id, lock_for_update=True)
         if idea is None:
             raise IdeaNotFoundError("Идея не найдена.")
-        ensure_can_delete_idea(actor, idea, contest.phase_at(clock.now()))
+        phase = contest.phase_at(clock.now())
+        ensure_can_delete_idea(actor, idea, phase)
         await dao.delete_idea(session, idea_id)
+        return contest_id, idea, phase
 
-    await database.run_in_transaction(work)
+    contest_id, idea, phase = await database.run_in_transaction(work)
+    _publish_idea_events(events, contest_id, idea, phase, deleted=True)
 
 
 async def list_all_contest_ideas(session: AsyncSession, contest_id: ContestId) -> tuple[Idea, ...]:

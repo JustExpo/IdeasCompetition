@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { ApiError, castVote, withdrawVote } from "../../api";
+import { ApiError, castVote, describeError, withdrawVote } from "../../api";
+import { reportLateAction } from "../../shared/lib/lateAction";
 import { contestScope, ideasKey } from "../../shared/lib/queryKeys";
 
 /**
@@ -15,6 +16,9 @@ export function useVoteMutation(contestId: number) {
       input.vote ? castVote(input.ideaId) : withdrawVote(input.ideaId),
     onSettled: async (_data, error) => {
       const closed = error instanceof ApiError && error.code === "voting_closed";
+      if (closed) {
+        reportLateAction(describeError(error).message);
+      }
       await queryClient.invalidateQueries({
         queryKey: closed ? contestScope(contestId) : ideasKey(contestId),
       });

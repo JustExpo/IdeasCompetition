@@ -16,6 +16,7 @@ from app.idea.model.policy import (
     ensure_can_delete_idea,
     ensure_can_edit_idea,
     ensure_can_submit_idea,
+    plan_idea_events,
 )
 from app.idea.model.submission import SubmittedIdea, compute_request_hash
 
@@ -36,4 +37,5 @@ __all__ = [
     "ensure_can_delete_idea",
     "ensure_can_edit_idea",
     "ensure_can_submit_idea",
+    "plan_idea_events",
 ]

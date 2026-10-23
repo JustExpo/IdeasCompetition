@@ -6,9 +6,10 @@
 """
 
 from app.common.exception import OrganizerCannotParticipateError
-from app.common.model import Actor, ensure_actor_active
+from app.common.model import Actor, ContestId, UserId, UserRole, ensure_actor_active
 from app.contest.model import ContestPhase, can_vote_in_contest
 from app.idea.model import Idea
+from app.realtime.model import Audience, ContestEvent, EventType, PlannedEvent
 from app.vote.exception import OwnIdeaVoteError, VotingClosedError
 
 
@@ -37,3 +38,18 @@ def ensure_can_withdraw_vote(actor: Actor, phase: ContestPhase) -> None:
         raise OrganizerCannotParticipateError("Организатор не голосует.")
     if not can_withdraw_vote(actor, phase):
         raise VotingClosedError("Голосование закрыто.")
+
+
+def plan_vote_events(contest_id: ContestId, voter_id: UserId) -> tuple[PlannedEvent, ...]:
+    """Кому сообщить о голосе (П5, П7): организатору — пересчитать цифры, самому голосующему —
+    обновить отметки «мой голос» в других его вкладках. Чужим голос не раскрывается."""
+    return (
+        PlannedEvent(
+            ContestEvent(EventType.RESULTS_CHANGED, contest_id=contest_id),
+            Audience(roles=frozenset({UserRole.ORGANIZER})),
+        ),
+        PlannedEvent(
+            ContestEvent(EventType.IDEAS_CHANGED, contest_id=contest_id),
+            Audience(users=frozenset({voter_id})),
+        ),
+    )

@@ -1,5 +1,6 @@
 import createClient from "openapi-fetch";
 
+import { observeBuild, observeMode } from "./build";
 import { createApiError } from "./errors";
 import type { paths } from "./schema.gen";
 
@@ -14,6 +15,15 @@ export const apiClient = createClient<paths>({
   // `fetch` берётся при каждом вызове, а не при создании клиента: так его можно подменить
   // (MSW в тестах ставит перехват уже после загрузки модулей).
   fetch: (request) => fetch(request),
+});
+
+// Сборка сервера по заголовку ответа: если сервер обновили, пока страница открыта, вкладка
+// предложит перезагрузиться.
+apiClient.use({
+  onResponse({ response }) {
+    observeBuild(response.headers.get("X-App-Build"));
+    observeMode(response.headers.get("X-App-Mode"));
+  },
 });
 
 interface RawResult<T> {

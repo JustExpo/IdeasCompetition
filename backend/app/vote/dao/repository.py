@@ -27,11 +27,14 @@ async def insert_vote_if_absent(
     return (await session.execute(statement)).first() is not None
 
 
-async def delete_vote(session: AsyncSession, idea_id: IdeaId, voter_id: UserId) -> None:
-    """Отозвать голос; отсутствие голоса — не ошибка (идемпотентность, П6)."""
-    await session.execute(
-        delete(VoteRow).where(VoteRow.idea_id == idea_id, VoteRow.voter_id == voter_id)
+async def delete_vote(session: AsyncSession, idea_id: IdeaId, voter_id: UserId) -> bool:
+    """Отозвать голос; `False`, если голоса не было (идемпотентность, П6)."""
+    statement = (
+        delete(VoteRow)
+        .where(VoteRow.idea_id == idea_id, VoteRow.voter_id == voter_id)
+        .returning(VoteRow.idea_id)
     )
+    return (await session.execute(statement)).first() is not None
 
 
 async def select_voted_idea_ids(

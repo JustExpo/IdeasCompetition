@@ -30,7 +30,9 @@ async def put_vote(
     idea_id: UUID, request: Request, actor: Annotated[Actor, Depends(get_current_actor)]
 ) -> Response:
     state = request.app.state
-    await service.cast_vote(state.database, state.clock, actor, IdeaId(idea_id))
+    await service.cast_vote(
+        state.database, state.clock, actor, IdeaId(idea_id), events=state.events
+    )
     return Response(status_code=204)
 
 
@@ -41,5 +43,7 @@ async def delete_vote(
     idea_id: UUID, request: Request, actor: Annotated[Actor, Depends(get_current_actor)]
 ) -> Response:
     state = request.app.state
-    await service.withdraw_vote(state.database, state.clock, actor, IdeaId(idea_id))
+    await service.withdraw_vote(
+        state.database, state.clock, actor, IdeaId(idea_id), events=state.events
+    )
     return Response(status_code=204)

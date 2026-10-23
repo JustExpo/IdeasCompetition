@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ContestDetail } from "../api";
-import { DASHBOARD_POLL_MS } from "../features/organizer";
 import { renderApp } from "../test/render";
 import { apiUrl, employee, http, HttpResponse, organizer, problem, server } from "../test/server";
 
@@ -378,6 +377,8 @@ describe("страница конкурса: голосование", () => {
     await user.click(await screen.findByRole("button", { name: "Проголосовать" }));
     expect(await screen.findByText("Завершён")).toBeInTheDocument();
     expect(await screen.findByText("В конкурсе не было ни одной идеи.")).toBeInTheDocument();
+    // Форма и кнопка исчезли вместе с фазой, поэтому причину показывает страница (П2).
+    expect(screen.getByText(/Голосование закрыто\. Действие не выполнено/)).toBeInTheDocument();
   });
 
   it("все идеи свои — «Голосовать не за что»; своя идея удаляется с предупреждением о голосах", async () => {
@@ -471,26 +472,6 @@ describe("страница конкурса: экран организатора
     expect(screen.queryByRole("form")).not.toBeInTheDocument();
   });
 
-  it("опрашивает сервер раз в 5 секунд, пока конкурс не завершён", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    let calls = 0;
-    server.use(
-      asOrganizer,
-      http.get(contestUrl, () => HttpResponse.json(contest("voting", []))),
-      http.get(apiUrl("/api/organizer/contests/7/dashboard"), () => {
-        calls += 1;
-        return HttpResponse.json({ ideas_count: calls, voters_count: 0, results: [] });
-      }),
-    );
-    renderApp("/contests/7");
-    await screen.findByText("Идей подано");
-    const before = calls;
-    await vi.advanceTimersByTimeAsync(DASHBOARD_POLL_MS + 100);
-    await waitFor(() => {
-      expect(calls).toBeGreaterThan(before);
-    });
-  });
-
   it("пустой конкурс", async () => {
     server.use(
       asOrganizer,
@@ -529,7 +510,7 @@ describe("страница конкурса: экран организатора
     });
 
     returnToTab();
-    expect(await screen.findByText(/Нет связи с сервером/)).toBeInTheDocument();
+    expect(await screen.findByText(/Не удалось обновить данные/)).toBeInTheDocument();
     expect(screen.getByText("Проголосовало").nextElementSibling).toHaveTextContent("3");
   });
 
