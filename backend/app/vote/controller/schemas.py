@@ -37,6 +37,7 @@ class VotingIdeaItem(BaseModel):
     title: str
     description: str
     is_mine: bool
+    my_vote: bool
 
 
 class FinishedIdeaItem(BaseModel):
@@ -98,6 +99,7 @@ def _voting_item(listed: ListedIdea) -> VotingIdeaItem:
         title=idea.content.title,
         description=idea.content.description,
         is_mine=listed.is_mine,
+        my_vote=listed.my_vote,
     )
 
 

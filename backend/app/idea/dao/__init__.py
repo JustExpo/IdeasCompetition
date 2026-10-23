@@ -3,6 +3,7 @@
 from app.idea.dao.repository import (
     count_author_ideas,
     count_contest_ideas,
+    delete_idea,
     insert_idea_if_absent,
     select_contest_ideas,
     select_idea,
@@ -16,6 +17,7 @@ __all__ = [
     "IdeaRow",
     "count_author_ideas",
     "count_contest_ideas",
+    "delete_idea",
     "insert_idea_if_absent",
     "select_contest_ideas",
     "select_idea",

@@ -57,3 +57,10 @@ async def patch_idea(
         version=body.version,
     )
     return IdeaResponse.from_idea(idea)
+
+
+@router.delete("/api/ideas/{idea_id}", status_code=204, dependencies=[require(Policy.EMPLOYEE)])
+async def delete_idea(idea_id: UUID, request: Request, actor: CurrentActor) -> Response:
+    state = request.app.state
+    await service.delete_idea(state.database, state.clock, actor, IdeaId(idea_id))
+    return Response(status_code=204)
