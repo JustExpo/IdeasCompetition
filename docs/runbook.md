@@ -1,6 +1,6 @@
 # Runbook: запуск, эксплуатация, диагностика, восстановление
 
-> **Статус: план.** Скрипты и `Makefile` появятся на этапе каркаса. Ни одна команда ниже ещё не запускалась.
+> **Статус:** реализованы и проверены в CI `make up/down/restart/logs/migrate/psql/cli/check/test-*/e2e` и `scripts/check_singleton.sh`; `make up` на Mac владельца не проверялся. **Не реализованы (отменены владельцем 06:11, это план):** `make status`, `backup`, `restore-check`, `restore`, `destroy`, команды CLI `reset-password`, `revoke-sessions`, `status`. Из CLI есть только `create-organizer` и `export-openapi`; пароль существующего организатора из `.env` не меняется.
 > Обязательные правила — `CLAUDE.md` §11–§13; здесь подробности для оператора.
 
 ## 1. Первый запуск

@@ -27,7 +27,7 @@ migrate: ## Применить миграции вручную (exec, не run)
 psql: ## Консоль PostgreSQL
 	$(COMPOSE) exec db psql -U ideas -d ideas
 
-cli: ## Команды оператора: make cli ARGS="..." (модуль app.cli появится в IC-007)
+cli: ## Команды оператора: make cli ARGS="..." (create-organizer, export-openapi)
 	$(COMPOSE) exec app python -m app.cli $(ARGS)
 
 test-unit: ## Unit-тесты backend и Vitest (frontend: сначала `cd frontend && npm ci`)

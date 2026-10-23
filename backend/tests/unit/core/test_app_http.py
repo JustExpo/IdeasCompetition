@@ -152,6 +152,28 @@ async def test_403_for_unsafe_request_from_foreign_origin(client: httpx.AsyncCli
     assert_problem(response, 403, "origin_not_allowed")
 
 
+async def test_unsafe_request_from_loopback_twin_is_allowed_in_dev(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.post(
+        "/api/_probe/echo",
+        json={"count": 1},
+        headers={"Origin": "http://localhost:8000"},
+    )
+
+    assert response.status_code == 200
+
+
+async def test_loopback_twin_with_other_port_or_scheme_is_rejected(
+    client: httpx.AsyncClient,
+) -> None:
+    for origin in ("http://localhost:9999", "https://localhost:8000", "http://evil.localhost:8000"):
+        response = await client.post(
+            "/api/_probe/echo", json={"count": 1}, headers={"Origin": origin}
+        )
+        assert_problem(response, 403, "origin_not_allowed")
+
+
 @pytest.mark.parametrize("method", ["PUT", "PATCH", "DELETE"])
 async def test_every_unsafe_method_needs_origin(client: httpx.AsyncClient, method: str) -> None:
     response = await client.request(method, "/api/_probe/echo")
